@@ -1,6 +1,8 @@
 
 import re 
 import pandas as pd
+import matplotlib.pyplot as plt
+import networkx as nx
 
 ##### Data tracker for graph object #####
 # data - whole data set
@@ -9,7 +11,7 @@ import pandas as pd
 # adj_mat - adj matrix for units and feed/prod streams 
 # units - list of units categorised into type of unit with available model
 # unit_sensors - dict storing inlet, outlet and unit mounted sensors for each unit 
-# 
+# subgraphs - a dict containing each unit and the nodes and edges associated with it
 
 
 
@@ -17,16 +19,18 @@ import pandas as pd
 
 class unit_lib:
 
-    def __init__(graph, topology, data):
+    def __init__(graph, topology, data, configuraton):
         
-        # Errors if topology or data not entered 
         graph.data = data
         graph.topology = topology
+        graph.configuraton = configuraton
+        graph.subgraphs = {}
         graph.supported_units = {'reactor' : 'react', 
                                 'distilltion column' : 'distil', 
                                 'absorption column' : 'abs',
                                 'stripping column' : 'str',
                                 'heat exchanger' : 'hex',
+                                'furnace' : 'furn',
                                 'compressor' : 'comp',
                                 'flash drum' : 'flash',
                                 'control valve' : 'v'}
@@ -63,7 +67,6 @@ class unit_lib:
                 streams_present.append(source_unit)
 
             else: 
-
                 units_present.append(source_unit)
 
             dest_unit = itr_pipes[1]
@@ -72,7 +75,6 @@ class unit_lib:
                 streams_present.append(dest_unit)
 
             else: 
-
                 units_present.append(dest_unit)
 
         units_present = list(set(units_present))
@@ -161,7 +163,7 @@ class unit_lib:
             if fs_index == -1:
                 
                 # Have to get more complicated when there is multiple of the same sensor on one unit 
-                unit_sensors[sensor_loc]['unit'] = itr_sensor
+                unit_sensors[sensor_loc]['unit'].append(itr_sensor)
             else:
 
                 source_unit = sensor_loc[:fs_index]
@@ -175,7 +177,6 @@ class unit_lib:
                     unit_sensors[source_unit]['out streams'].append((itr_sensor, dest_unit))
 
                 else:
-
                     unit_sensors[source_unit]['out streams'].append((itr_sensor, dest_unit))
                     unit_sensors[dest_unit]['in streams'].append((itr_sensor, source_unit))
 
@@ -222,7 +223,7 @@ class unit_lib:
 
 
                     
-        # Composition changes only across reactors and columns - leave this for now as its dependent on how the reactors are modelled 
+        # Composition changes only across reactors and separators - leave this for now as its dependent on how the reactors are modelled 
 
 
         graph.unit_sensors = unit_sensors
@@ -232,15 +233,15 @@ class unit_lib:
     def model_comp(graph):
 
         # Hardcoding latent structure 
-        all_vars = ['T_in', 'T_out', 'F in', 'F_out', 'P_in', 'P_out', 'X_in', 'X_out', 'W']
-        latent_struct = [('P_in', 'W') , ('W', 'P_out') , ('P_out', 'W') , ('P_out', 'T_out') , ('F_in', 'F_out') , ('X_in', 'X_out')]
+        all_sensors = ['T_in', 'T_out', 'F_in', 'F_out', 'P_in', 'P_out', 'X_in', 'X_out', 'W']
+        latent_struct = [('P_in', 'P_out') , ('W', 'P_out') , ('P_out', 'W') , ('P_out', 'T_out') , ('F_in', 'F_out') , ('X_in', 'X_out')]
+        latent_adj_mat = build_latent_adj_mat(all_sensors, latent_struct)
 
-        
         # For every compressor 
         compressors = graph.units['comp']
         sens_type_pattern = re.compile(r'.(T|F|P|X)_')
         for itr_comp in compressors:
-
+            
             present_sensors = []
 
             # Get inlet sensors 
@@ -263,12 +264,165 @@ class unit_lib:
 
                     present_sensors.append(match.group(1) + '_out')
 
+            # Obtain user defined work variable 
+            if graph.configuraton[itr_comp]['duty var']:
+
+                present_sensors.append('W')
 
 
-            print(present_sensors)
-            print('***')
+            graph.build_actual_structure(itr_comp, latent_adj_mat, present_sensors)
 
             
+    def model_furn(graph):
+        
+        sens_type_pattern = re.compile(r'.(T|F|P|X)_')
+        adj_mat = graph.adj_mat
+        furnaces = graph.units['furn']
+        for itr_furnace in furnaces:
+
+            config = graph.configuraton[itr_furnace]
+            num_in_streams = adj_mat[itr_furnace].sum()
+            num_out_streams = adj_mat.loc[itr_furnace].sum()
+
+            # Determine latent structure from how many of the utility streams are of interest
+            if num_in_streams == 2 and num_out_streams == 1:
+
+                # Fuel, feed and product streams
+                if config['fuel stream']:
+
+                    all_sensors = ['T_fuel', 'P_fuel', 'F_fuel', 'T_in', 'P_in', 'F_in', 'X_in', 'T_out', 'P_out', 'F_out', 'X_out', 'T_unit', 'P_unit']
+                    latent_struct = [('F_fuel', 'P_unit') , ('F_fuel', 'T_unit') , ('T_unit', 'T_out') , ('T_out', 'P_out') , ('T_in', 'T_out') , ('P_in', 'P_out') , ('F_in', 'F_out') , ('F_in', 'T_out') , ('X_in', 'X_out')]
+                    latent_adj_mat = build_latent_adj_mat(all_sensors, latent_struct)
+
+                # Air, feed and product streams
+                else:
+
+                    all_sensors = ['T_air', 'P_air', 'F_air', 'T_stack', 'P_stack', 'F_stack', 'T_in', 'P_in', 'F_in', 'X_in', 'T_out', 'P_out', 'F_out', 'X_out', 'T_unit', 'P_unit']
+                    latent_struct = [('T_air', 'T_unit') , ('P_air', 'P_unit') , ('F_air', 'T_unit') , ('F_air', 'P_unit') , ('T_unit', 'T_stack') , ('P_unit', 'P_stack') , ('P_unit', 'F_stack') , 
+                                     ('T_unit', 'T_out') , ('T_out', 'P_out') , ('T_in', 'T_out') , ('P_in', 'P_out') , ('F_in', 'F_out') , ('F_in', 'T_out') , ('X_in', 'X_out')]
+                    latent_adj_mat = build_latent_adj_mat(all_sensors, latent_struct)
+
+
+            elif num_in_streams == 2 and num_out_streams == 2:
+
+                # Fuel, stack, feed and product streams
+                if config['fuel stream']:
+
+                    all_sensors = ['T_fuel', 'P_fuel', 'F_fuel', 'T_stack', 'P_stack', 'F_stack', 'T_in', 'P_in', 'F_in', 'X_in', 'T_out', 'P_out', 'F_out', 'X_out', 'T_unit', 'P_unit']
+                    latent_struct = [('F_fuel', 'P_unit') , ('F_fuel', 'T_unit') , ('T_unit', 'T_stack') , ('P_unit', 'P_stack') , ('P_unit', 'F_stack') , ('T_unit', 'T_out') , ('T_out', 'P_out') , ('T_in', 'T_out') , 
+                                    ('P_in', 'P_out') , ('F_in', 'F_out') , ('F_in', 'T_out') , ('X_in', 'X_out')]
+                    latent_adj_mat = build_latent_adj_mat(all_sensors, latent_struct)
+
+                # Air, stack, feed and product streams
+                else:
+
+                    all_sensors = ['T_air', 'P_air', 'F_air', 'T_fuel', 'P_fuel', 'F_fuel', 'T_stack', 'P_stack', 'F_stack', 'T_in', 'P_in', 'F_in', 'X_in', 'T_out', 'P_out', 'F_out', 'X_out', 'T_unit', 'P_unit']
+                    latent_struct = [('T_air', 'T_unit') , ('P_air', 'P_unit') , ('F_air', 'T_unit') , ('F_air', 'P_unit') , ('F_fuel', 'P_unit') , ('F_fuel', 'T_unit') , ('T_unit', 'T_stack') , 
+                                    ('P_unit', 'P_stack') , ('P_unit', 'F_stack') , ('T_unit', 'T_out') , ('T_out', 'P_out') , ('T_in', 'T_out') , ('P_in', 'P_out') , ('F_in', 'F_out') , ('F_in', 'T_out') , ('X_in', 'X_out')]
+                    latent_adj_mat = build_latent_adj_mat(all_sensors, latent_struct)
+
+
+            # Fuel, air, feed and prod streams 
+            elif num_in_streams == 3 and num_out_streams == 1:
+
+                all_sensors = ['T_air', 'P_air', 'F_air', 'T_fuel', 'P_fuel', 'F_fuel', 'T_in', 'P_in', 'F_in', 'X_in', 'T_out', 'P_out', 'F_out', 'X_out', 'T_unit', 'P_unit']
+                latent_struct = [('T_air', 'T_unit') , ('P_air', 'P_unit') , ('F_air', 'T_unit') , ('F_air', 'P_unit') , ('F_fuel', 'P_unit') , ('F_fuel', 'T_unit') , ('T_unit', 'T_out') , ('T_out', 'P_out') , 
+                                 ('T_in', 'T_out') , ('P_in', 'P_out') , ('F_in', 'F_out') , ('F_in', 'T_out') , ('X_in', 'X_out')]
+                latent_adj_mat = build_latent_adj_mat(all_sensors, latent_struct)
+
+
+            # Fuel, air, stack, feed and prod streams     
+            elif num_in_streams == 3 and num_out_streams == 2:
+
+                all_sensors = ['T_air', 'P_air', 'F_air', 'T_fuel', 'P_fuel', 'F_fuel', 'T_stack', 'P_stack', 'F_stack', 'T_in', 'P_in', 'F_in', 'X_in', 'T_out', 'P_out', 'F_out', 'X_out', 'T_unit', 'P_unit']
+                latent_struct = [('T_air', 'T_unit') , ('P_air', 'P_unit') , ('F_air', 'T_unit') , ('F_air', 'P_unit') , ('F_fuel', 'P_unit') , ('F_fuel', 'T_unit') , ('T_unit', 'T_stack') , 
+                                 ('P_unit', 'P_stack') , ('P_unit', 'F_stack') , ('T_unit', 'T_out') , ('T_out', 'P_out') , ('T_in', 'T_out') , ('P_in', 'P_out') , ('F_in', 'F_out') , ('F_in', 'T_out') , ('X_in', 'X_out')]
+                latent_adj_mat = build_latent_adj_mat(all_sensors, latent_struct)
+
+            else:
+
+                A=1
+                # Error handling? Or do it all prior to this 
+
+
+            present_sensors = []
+
+            # Get inlet sensors 
+            inlet_sensors = graph.unit_sensors[itr_furnace]['in streams']
+            for itr_sens_tup in inlet_sensors:
+
+                sensor_name = itr_sens_tup[0]
+                match = re.search(sens_type_pattern, sensor_name)
+                if match:
+
+                    sensor_location = sensor_name[:match.span()[0]]
+                    if sensor_location in config['process streams']:
+
+                        present_sensors.append(match.group(1) + '_in')
+                    
+                    elif sensor_location == config['fuel stream']:
+
+                        present_sensors.append(match.group(1) + '_fuel')
+
+                    else:
+                        present_sensors.append(match.group(1) + '_air')
+  
+            # Get outlet sensors 
+            outlet_sensors = graph.unit_sensors[itr_furnace]['out streams']
+            for itr_sens_tup in outlet_sensors:
+
+                sensor_name = itr_sens_tup[0]
+                match = re.search(sens_type_pattern, sensor_name)
+                if match:
+
+                    sensor_location = sensor_name[:match.span()[0]]
+                    if sensor_location in config['process streams']:
+
+                        present_sensors.append(match.group(1) + '_out')
+                    
+                    else:
+                        present_sensors.append(match.group(1) + '_stack')
+
+            # Get unit sensors
+            unit_sensors = graph.unit_sensors[itr_furnace]['unit']
+            for itr_sensor in unit_sensors:
+
+                match = re.search(sens_type_pattern, itr_sensor)
+                if match:
+
+                    present_sensors.append(match.group(1) + '_unit')
+
+            graph.build_actual_structure(itr_furnace, latent_adj_mat, present_sensors)
+                         
+
+    def build_actual_structure(graph, unit, latent_adj_mat, present_sensors):
+
+        actual_structure = []
+        for itr_sensor in present_sensors:
+
+            sensor_queue = latent_adj_mat.columns[latent_adj_mat.loc[itr_sensor] == 1].to_list()
+            while sensor_queue:
+
+                next_sensor = sensor_queue.pop(0)
+                if next_sensor in present_sensors:
+
+                    actual_structure.append((itr_sensor, next_sensor))
+
+                else:
+                    sensor_queue.extend(latent_adj_mat.columns[latent_adj_mat.loc[next_sensor] == 1].to_list())
+
+
+        print(present_sensors)
+        subgraph = nx.DiGraph()
+        plt.figure(figsize=[5, 5])
+        subgraph.add_nodes_from(present_sensors)
+        subgraph.add_edges_from(actual_structure)
+        nx.draw(subgraph, with_labels = True)
+        plt.show()
+
+        graph.subgraphs[unit] = {}
+        graph.subgraphs[unit]['nodes'] = present_sensors
+        graph.subgraphs[unit]['edges'] = actual_structure
 
 
 
@@ -276,6 +430,29 @@ class unit_lib:
 
 
 
+
+
+
+
+
+
+##### This will not be in final release. Will hard code adj matrix to save time #####
+def build_latent_adj_mat(all_sensors, latent_struct):
+
+    latent_adj_mat = pd.DataFrame(columns=all_sensors, index = all_sensors)
+    latent_adj_mat.iloc[:,:] = 0
+
+    for itr_sensor in all_sensors:
+
+        for itr_edge in latent_struct:
+
+            source_sensor = itr_edge[0]
+            if source_sensor == itr_sensor:
+
+                dest_sensor = itr_edge[1]            
+                latent_adj_mat.loc[source_sensor,dest_sensor] = 1
+
+    return latent_adj_mat
 
 
 
