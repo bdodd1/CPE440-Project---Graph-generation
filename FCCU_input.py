@@ -16,8 +16,8 @@ topology = {}
 
 
 topology['pipes'] = [('feed_air','comp_1') , ('comp_1','v_6') , ('v_6','react_1') , ('react_1','v_7') , ('v_7','prod_stack') , ('react_1','v_2') ,
-                     ('v_2','react_2') , ('react_2','v_3') , ('v_3','react_1') , ('feed_feedstream','furn_1') , ('feed_fuel','v_1') , ('v_1','furn_1'),
-                     ('furn_1','react_2') , ('react_2','distil_1') , ('distil_1','prod_slurry') , ('distil_1','hex_1') , ('hex_1','distil_1') , ('feed_uthex1', 'hex_1') , 
+                     ('v_2','react_2') , ('react_2','v_3') , ('v_3','react_1') , ('feed_feedstream','furn_1') , ('feed_fuel','v_1') , ('v_1','furn_1'), ('feed_airin', 'furn_1') , 
+                     ('furn_1','react_2') , ('furn_1', 'prod_furnstack') , ('react_2','distil_1') , ('distil_1','prod_slurry') , ('distil_1','hex_1') , ('hex_1','distil_1') , ('feed_uthex1', 'hex_1') , 
                      ('hex_1', 'prod_uthex1') , ('distil_1','v_11') , ('v_11','prod_lightoil') , ('distil_1','v_10') , ('v_10','prod_heavynaptha') , ('distil_1','hex_2') , 
                      ('hex_2','flash_1') , ('feed_uthex2', 'hex_1') , ('hex_1', 'prod_uthex2') , ('flash_1','split_liq') , ('split_liq', 'v_8') , ('v_8','distil_1') , ('split_liq','v_9') , 
                      ('v_9','prod_lightnaptha') , ('flash_1','split_gas') , ('split_gas', 'v_4') , ('v_4','comp_2') , ('comp_2','prod_lpg') , ('split_gas','prod_flare')]
@@ -65,8 +65,7 @@ configuration = {
                 'flash_1' :
                     {'gas stream' : 'flash_1/split_gas'},
                 'distil_1' :
-                    {'total stages' : 20,
-                     'stream locations' :
+                    {'stream locations' :
                         {'react_2/distil_1' : 20,
                          'v_8/distil_1' : 0,
                          'hex_1/distil_1' : 20,
@@ -104,6 +103,8 @@ mode = {'causality' : 1,
 
 
 from Library import unit_lib
+# from Library_biglatent import unit_lib
+
 
 graph = unit_lib(topology, data, configuration, mode)
 # graph.classify_units()
