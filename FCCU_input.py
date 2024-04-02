@@ -4,11 +4,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-data = pd.read_csv('NOC_stableFeedFlow_outputs.csv')
+
 
 
 # Topology neglected 
-# - 2 HEX on fractionator - no sensors on them. Will have to model interstage cooling though 
 # - v5 as it is not involved in any control loop and has no sensors around it 
 
 
@@ -22,7 +21,7 @@ topology['pipes'] = [('feed_air','comp_1') , ('comp_1','v_6') , ('v_6','react_1'
                      ('hex_2','flash_1') , ('feed_uthex2', 'hex_1') , ('hex_1', 'prod_uthex2') , ('flash_1','split_liq') , ('split_liq', 'v_8') , ('v_8','distil_1') , ('split_liq','v_9') , 
                      ('v_9','prod_lightnaptha') , ('flash_1','split_gas') , ('split_gas', 'v_4') , ('v_4','comp_2') , ('comp_2','prod_lpg') , ('split_gas','prod_flare')]
 
-topology['sensors'] = ['feed_air/comp_1.P_1', 'comp_1/v_6.F_7', 'comp_1/v_6.P_2', 'react_1.T_reg', 'react_1.L_sp', 'react_1.P_6' , 'react_1/v_7.F_sg', 
+topology['sensors'] = ['feed_air/comp_1.P_1', 'comp_1/v_6.F_7', 'comp_1/v_6.P_2', 'react_1.T_reg', 'react_1.L_sp', 'react_1.P_6', 'react_1/v_7.F_sg', 
                        'react_1/v_7.T_cyc', 'v_7/prod_stack.X_co', 'v_7/prod_stack.X_co2', 'react_1/v_2.F_rgc', 'react_2.T_r', 'react_2.P_4', 
                        'react_2/v_3.F_sc' , 'feed_feedstream/furn_1.F_3', 'feed_feedstream/furn_1.T_1', 'feed_fuel/v_1.F_5', 'furn_1.T_3', 'furn_1/react_2.T_2', 
                        'distil_1.T_20', 'distil_1.T_10', 'distil_1.T_fra', 'distil_1.P_5', 'v_11/prod_lightoil.F_lco' , 'v_10/prod_heavynaptha.F_hn', 
@@ -33,8 +32,54 @@ topology['control_loops'] = {'v_6' : ['react_1.T_reg'] , 'v_1' : ['furn_1/react_
 
 
 
-# Vars not being used in dataset 
-additional_vars = ['time', 'T_atm', 'deltaP', 'F_air', 'T_cyc - T_reg', 'F_v11']
+data = pd.read_csv('NOC_stableFeedFlow_outputs.csv')
+additional_vars = ['Time', 'T_atm', 'deltaP', 'Fair', 'T_cyc-T_reg', 'FV11']
+data = data.drop(columns = additional_vars)
+
+var_mapping = {
+                'feed_air/comp_1.P_1' : 'P1',
+                'comp_1/v_6.F_7' : 'F7',
+                'comp_1/v_6.P_2' : 'P2',
+                'react_1.T_reg' : 'T_reg',
+                'react_1.L_sp' : 'L_sp',
+                'react_1.P_6' : 'P6',
+                'react_1/v_7.F_sg' : 'F_sg',
+                'react_1/v_7.T_cyc' : 'T_cyc',
+                'v_7/prod_stack.X_co' : 'C_cosg',
+                'v_7/prod_stack.X_co2' : 'C_co2sg',
+                'react_1/v_2.F_rgc' : 'F_rgc',
+                'react_2.T_r' : 'T_r',
+                'react_2.P_4' : 'P4',
+                'react_2/v_3.F_sc' : 'F_sc',
+                'feed_feedstream/furn_1.F_3' : 'F3',
+                'feed_feedstream/furn_1.T_1' : 'T1',
+                'feed_fuel/v_1.F_5' : 'F5',
+                'furn_1.T_3' : 'T3',
+                'furn_1/react_2.T_2' : 'T2',
+                'distil_1.T_20' : 'T_20',
+                'distil_1.T_10' : 'T_10',
+                'distil_1.T_fra' : 'T_fra',
+                'distil_1.P_5' : 'P5',
+                'v_11/prod_lightoil.F_lco' : 'F_LCO',
+                'v_10/prod_heavynaptha.F_hn' : 'F_HN',
+                'v_9/prod_lightnaptha.F_ln' : 'F_LN',
+                'v_8/distil_1.F_reflux' : 'F_Reflux',
+                'comp_2/prod_lpg.F_lpg' : 'F_LPG',
+                'distil_1/prod_slurry.F_slurry' : 'F_Slurry',
+                'ACAB' : 'ACAB',
+                'AWGC' : 'AWGC',
+                'Pos_1' : 'V1',
+                'Pos_2' : 'V2',
+                'Pos_3' : 'V3',
+                'Pos_4' : 'V4',
+                'Pos_6' : 'V6',
+                'Pos_7' : 'V7',
+                'Pos_8' : 'V8',
+                'Pos_9' : 'V9',
+                'Pos_10' : 'V10',
+                'Pos_11' : 'V11',
+                }
+
 
 
 # Need to handle default values 
@@ -47,7 +92,7 @@ configuration = {
                 'comp_2' : 
                     {'duty var' : 'AWGC'},
                 'react_1' :
-                    {'stream phase' : 
+                    {'stream phases' : 
                         {'v_6/react_1' : 'gas',
                          'v_3/react_1' : 'sol',
                          'react_1/v_7' : 'gas',
@@ -55,7 +100,7 @@ configuration = {
                      'utility streams' : None,
                      'reactants' : None},
                 'react_2' :
-                    {'stream phase' : 
+                    {'stream phases' : 
                         {'furn_1/react_2' : 'gas',
                          'v_2/react_2' : 'sol',
                          'react_2/distil_1' : 'gas',
@@ -96,22 +141,15 @@ configuration = {
 
 
 
-mode = {'causality' : 1,
-        'reactions' : 1,
-        'PT change' : 1,
-        }
+
+# from Library import unit_lib
+
+# graph = unit_lib(topology, data, configuration, var_mapping)
+# graph.build_graph()
 
 
-from Library import unit_lib
-# from Library_biglatent import unit_lib
+from graph_builder_class import graph_builder_class
 
-
-graph = unit_lib(topology, data, configuration, mode)
-# graph.classify_units()
-# graph.build_adj_mat()
-# graph.get_unit_sensors()
-# graph.model_comp()
-
+graph = graph_builder_class(data, topology, configuration, var_mapping)
 graph.build_graph()
-
 
