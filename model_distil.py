@@ -15,6 +15,7 @@ class model_distil:
     
     def model_ctrl(model):
 
+        # Determine latent stucture from column configuration
         model.init_sensor_stores()
         model.order_unit_sensors()
         model.split_TP_sensors()
@@ -24,8 +25,9 @@ class model_distil:
         model.product_streams()
         model.no_reboil_reflux()
 
-        model.get_in_sensors()
-        model.get_out_sensors()
+        # Get sensors and build actual structure 
+        model.get_in_out_sensors('in')
+        model.get_in_out_sensors('out')
         model.get_L_sensor()
         model.latent_adj_mat = tools.build_adj_mat(model.all_sensors, model.latent_struct)
         model.actual_structure = tools.build_actual_structure(model.latent_adj_mat, model.present_sensors)
@@ -83,13 +85,7 @@ class model_distil:
     def feed_stream(model):
 
         # Find the closest P sensor above feed stream 
-        feed_stream = model.stream_tags_rev['feed']
-        model.feed_location = model.config['stream locations'][feed_stream]
-        for itr, itr_P_sens in enumerate(model.ordered_P_sens):
-
-            if model.feed_location >= model.config['sensor locations'][itr_P_sens]:
-
-                model.feed_adj_P_ind = itr
+        model.feed_adj_P_ind, model.feed_location = model.find_closest_ind('feed', model.ordered_P_sens, 'above')
 
         # Add in edges between pressure sensors from the feed to the top 
         model.latent_struct.extend([('F_feed', model.local_P_sens[model.feed_adj_P_ind]) , ('P_feed', model.local_P_sens[model.feed_adj_P_ind]) , (model.local_P_sens[0], 'P_top') , (model.local_P_sens[0], 'F_top')])
@@ -108,15 +104,8 @@ class model_distil:
             model.all_sensors.extend(['F_reflux', 'T_reflux', 'P_reflux'])
 
             # Find the closest T sensor below the reflux stream 
-            reflux_stream = model.stream_tags_rev['reflux']
-            reflux_location = model.config['stream locations'][reflux_stream]
-            for itr, itr_T_sens in enumerate(model.ordered_T_sens):
+            closest_ind, _ = model.find_closest_ind('reflux', model.ordered_T_sens, 'below')
 
-                if reflux_location <= model.config['sensor locations'][itr_T_sens]:
-
-                    closest_ind = itr
-                    break 
-            
             # Add in edges between temp sensors from the reflux stream to the bottom
             model.latent_struct.extend([('F_reflux', model.local_T_sens[closest_ind]) , ('F_reflux', 'L_unit') , ('T_reflux', model.local_T_sens[closest_ind]) , (model.local_T_sens[-1], 'T_bot')])
             model.composition_edges.append((model.local_T_sens[-1], 'X_bot'))
@@ -138,13 +127,7 @@ class model_distil:
             model.all_sensors.extend(['F_reboil', 'T_reboil', 'P_reboil']) 
 
             # Find the closest P sensor above the reboil stream 
-            reboil_stream = model.stream_tags_rev['reboil']
-            reboil_location = model.config['stream locations'][reboil_stream]
-            for itr, itr_P_sens in enumerate(model.ordered_P_sens):
-
-                if reboil_location >= model.config['sensor locations'][itr_P_sens]:
-
-                    closest_ind = itr 
+            closest_ind, _ = model.find_closest_ind('reboil', model.ordered_P_sens, 'above')
 
             # Add in edges between pressure sensors from reboil stream to feed stream (feed to top already covered)
             model.latent_struct.extend([('F_reboil', model.local_P_sens[closest_ind]) , ('P_reboil', model.local_P_sens[closest_ind])])
@@ -155,11 +138,7 @@ class model_distil:
                     model.latent_struct.append((model.local_P_sens[itr_P_sens_ind+1] , model.local_P_sens[itr_P_sens_ind]))
 
             # Find the closest T sensor above the reboil stream 
-            for itr, itr_T_sens in enumerate(model.ordered_T_sens):
-
-                if reboil_location >= model.config['sensor locations'][itr_T_sens]:
-
-                    closest_ind = itr 
+            closest_ind, _ = model.find_closest_ind('reboil', model.ordered_T_sens, 'above')
 
             # Add in edges between temp sensors from reboil stream to top stream
             model.latent_struct.extend([('F_reboil', model.local_T_sens[closest_ind]) , ('T_reboil', model.local_T_sens[closest_ind]) , (model.local_T_sens[0] , 'T_top')])
@@ -271,60 +250,30 @@ class model_distil:
                 model.latent_struct.append((curr_T_sens, next_T_sens))
     
 
-    def get_in_sensors(model):
+    def get_in_out_sensors(model, stream):
 
-        inlet_sensors = model.unit_sensors['in streams']
-        for itr_in_sens_tup in inlet_sensors:
+        # For every in/out sensor
+        sensors = model.unit_sensors[stream + ' streams']
+        for itr_sens_tup in sensors:
 
-            sensor_name = itr_in_sens_tup[0]
-            source_unit = itr_in_sens_tup[1]
-            stream_name = f'{source_unit}/{model.unit_name}'
-            stream_tag = model.config['stream tags'][stream_name]
+            sensor_name = itr_sens_tup[0]
+            next_unit = itr_sens_tup[1]
 
-            match = re.search(r'.(F|T|P)_', sensor_name)
-            match_X = re.search(r'.X_', sensor_name)
-            if match:
+            # Stream name based on whether the stream is an inlet or outlet
+            if stream == 'in':
 
-                local_sensor_name = match.group(1) + '_' + stream_tag
-                model.present_sensors.append(local_sensor_name)
-                model.sensor_name_mapping[local_sensor_name] = sensor_name
-                
-            elif match_X:
+                stream_name = f'{next_unit}/{model.unit_name}'
+            else:
+                stream_name = f'{model.unit_name}/{next_unit}'
 
-                sens_id = sensor_name[match_X.span()[1]+1:]
-                gen_comp_sens = 'X_' + stream_tag
-                local_comp_sens = 'X_' + sens_id + stream_tag
-                for itr_comp_edge in model.composition_edges:
-
-                    if gen_comp_sens == itr_comp_edge[0]:
-
-                        model.all_sensors.append(local_comp_sens)
-                        model.latent_struct.append(local_comp_sens, itr_comp_edge[1])
-                        model.present_sensors.append(local_comp_sens)
-                        model.sensor_name_mapping[local_comp_sens] = sensor_name
-
-                    elif gen_comp_sens == itr_comp_edge[1]:
-
-                        model.all_sensors.append(local_comp_sens)
-                        model.latent_struct.append(itr_comp_edge[1], local_comp_sens)  
-                        model.present_sensors.append(local_comp_sens)
-                        model.sensor_name_mapping[local_comp_sens] = sensor_name
-
-                    
-    def get_out_sensors(model):
-
-        outlet_sensors = model.unit_sensors['out streams']
-        for itr_out_sens_tup in outlet_sensors:
-
-            sensor_name = itr_out_sens_tup[0]
-            dest_unit = itr_out_sens_tup[1]
-            stream_name = f'{model.unit_name}/{dest_unit}'
+            # Append stream location to tag if it is a product stream as there could be multiple
             stream_tag = model.config['stream tags'][stream_name]
             stream_location = model.config['stream locations'][stream_name]
             if stream_tag == 'prod':
 
                 stream_tag += str(stream_location)
 
+            # Check if sensor is F,T,P or X
             match = re.search(r'.(F|T|P)_', sensor_name)
             match_X = re.search(r'.X_', sensor_name)
             if match:
@@ -335,9 +284,12 @@ class model_distil:
 
             elif match_X:
 
+                # Create specific local comp sensor name using the ID
                 sens_id = sensor_name[match_X.span()[1]+1:]
                 gen_comp_sens = 'X_' + stream_tag
                 local_comp_sens = 'X_' + sens_id + stream_tag
+
+                # For every composition edge using general names add in edges to latent struct using specific local sensor names 
                 for itr_comp_edge in model.composition_edges:
 
                     if gen_comp_sens == itr_comp_edge[0]:
@@ -353,7 +305,7 @@ class model_distil:
                         model.latent_struct.append(itr_comp_edge[1], local_comp_sens)  
                         model.present_sensors.append(local_comp_sens)
                         model.sensor_name_mapping[local_comp_sens] = sensor_name
-    
+
 
     def get_L_sensor(model):
 
@@ -363,3 +315,19 @@ class model_distil:
 
                 model.present_sensors.append('L_unit')
                 model.sensor_name_mapping['L_unit'] = unit_sensor
+
+
+    def find_closest_ind(model, stream_tag, sensors, direction):
+        
+        stream = model.stream_tags_rev[stream_tag]
+        location = model.config['stream locations'][stream]
+        for itr, itr_sens in enumerate(sensors):
+
+            if location >= model.config['sensor locations'][itr_sens]:
+
+                closest_ind = itr
+                if direction == 'below':
+
+                    break
+
+        return closest_ind, location
