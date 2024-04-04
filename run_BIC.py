@@ -13,12 +13,12 @@ class run_BIC:
         model.data = data
         model.var_mapping = var_mapping
 
-
+    
     def calc_BIC(model):
 
         bayes_net = []
         present_vars = []
-        for itr_edge in model.graph:
+        for itr_edge in model.graph['edges']:
 
             bayes_net.append((model.var_mapping[itr_edge[0]], model.var_mapping[itr_edge[1]]))
             present_vars.append(model.var_mapping[itr_edge[0]])

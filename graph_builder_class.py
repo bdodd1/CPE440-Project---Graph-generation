@@ -61,6 +61,10 @@ class graph_builder_class:
 
         graph.fuse_subgraphs()
 
+        from run_fci import run_fci
+        graph_fci = run_fci(graph)
+        graph_fci.run_fci_ctrl()
+
 
     def fuse_subgraphs(graph):
 
@@ -85,10 +89,10 @@ class graph_builder_class:
         graph.whole_graph = whole_graph
 
 
-        vis_graph = nx.DiGraph()
-        plt.figure(figsize=[5, 5])
-        vis_graph.add_nodes_from(whole_graph['nodes'])
-        vis_graph.add_edges_from(whole_graph['edges'])
-        pos = nx.spring_layout(vis_graph)
-        nx.draw(vis_graph, pos, with_labels = True)
-        plt.show()
+        # vis_graph = nx.DiGraph()
+        # plt.figure(figsize=[5, 5])
+        # vis_graph.add_nodes_from(whole_graph['nodes'])
+        # vis_graph.add_edges_from(whole_graph['edges'])
+        # pos = nx.spring_layout(vis_graph)
+        # nx.draw(vis_graph, pos, with_labels = True)
+        # plt.show()

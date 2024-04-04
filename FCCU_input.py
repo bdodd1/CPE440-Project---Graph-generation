@@ -31,10 +31,20 @@ topology['control_loops'] = {'v_6' : ['react_1.T_reg'] , 'v_1' : ['furn_1/react_
                              'v_9' : [('L', 'flash_1')] , 'v_8' : ['distil_1.T_fra'] , 'v_10' : ('T', 'distill_1') , 'v_11' : ('T', 'distill_1')}
 
 
-
-data = pd.read_csv('NOC_stableFeedFlow_outputs.csv')
+data_files = ['NOC_stableFeedFlow_outputs.csv',
+              'NOC_varyingFeedFlow_outputs.csv',
+              'CAB_valveLeak_outputs.csv',
+              'condEff_decrease_outputs.csv',
+              'deltaP_increase_outputs.csv',
+              'Fhn_sensorDrift_outputs.csv',
+              'UAf_decrease_outputs.csv']
+file_ind = 1
+data = pd.read_csv(rf'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Data\{data_files[file_ind]}')
 additional_vars = ['Time', 'T_atm', 'deltaP', 'Fair', 'T_cyc-T_reg', 'FV11']
 data = data.drop(columns = additional_vars)
+
+
+
 
 var_mapping = {
                 'feed_air/comp_1.P_1' : 'P1',
@@ -140,12 +150,6 @@ configuration = {
                 }
 
 
-
-
-# from Library import unit_lib
-
-# graph = unit_lib(topology, data, configuration, var_mapping)
-# graph.build_graph()
 
 
 from graph_builder_class import graph_builder_class
