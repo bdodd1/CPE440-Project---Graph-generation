@@ -16,27 +16,20 @@ class run_BIC:
     
     def calc_BIC(model):
 
-        bayes_net = []
-        present_vars = []
-        for itr_edge in model.graph['edges']:
+        edges_col = [(model.var_mapping[itr_edge[0]], model.var_mapping[itr_edge[1]]) for itr_edge in model.graph['edges']]
+        nodes_col = [model.var_mapping[sensor] for sensor in model.graph['nodes']]
 
-            bayes_net.append((model.var_mapping[itr_edge[0]], model.var_mapping[itr_edge[1]]))
-            present_vars.append(model.var_mapping[itr_edge[0]])
-            present_vars.append(model.var_mapping[itr_edge[1]])
+        bayes_net = BayesianNetwork()
+        bayes_net.add_nodes_from(nodes_col)
+        bayes_net.add_edges_from(edges_col)
 
-        present_vars = list(set(present_vars))
-        vars_to_drop = [var for var in model.data.columns if var not in present_vars]
-        model.data = model.data.drop(columns = vars_to_drop)
-
-        bayes_net = BayesianNetwork(bayes_net)
-
-        estimator = BayesianEstimator(bayes_net, model.data)
-        bayes_net.fit(model.data, estimator=estimator)
+        # estimator = BayesianEstimator(bayes_net, model.data)
+        # bayes_net.fit(model.data, estimator=BayesianEstimator, prior_type='BDeu')
+        bayes_net.fit(model.data, n_jobs=4) 
+ 
 
         log_likelihood = bayes_net.log_likelihood(model.data)
-
         num_params = bayes_net.number_of_parameters()
-
         n = len(model.data)
-        BIC = -2 * log_likelihood + num_params * math.log(n)
-        print("BIC Score:", BIC)
+        model.BIC = -2 * log_likelihood + num_params * math.log(n)
+        print("BIC Score:", model.BIC)

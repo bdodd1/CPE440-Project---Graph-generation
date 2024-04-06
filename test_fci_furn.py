@@ -1,7 +1,7 @@
 
 from causallearn.search.ConstraintBased.FCI import fci
 from causallearn.utils.PCUtils.BackgroundKnowledge import BackgroundKnowledge
-from causallearn.utils.cit import fisherz, kci, d_separation
+from causallearn.utils.cit import fisherz, kci, CIT
 import matplotlib.pyplot as plt
 import networkx as nx
 from openpyxl import Workbook
@@ -11,25 +11,32 @@ from openpyxl import Workbook
 
 class run_fci:
 
-    def __init__(graph_fci, graph):
+    def __init__(graph_fci, graph, data, var_mapping, struct):
 
-        graph_fci.data_orig = graph.data
-        graph_fci.whole_graph = graph.whole_graph
-        graph_fci.var_mapping = graph.var_mapping
-        graph_fci.rev_var_mapping = {column: sensor for sensor, column in graph.var_mapping.items()}
+        graph_fci.data_orig = data
+        graph_fci.graph = graph
+        graph_fci.var_mapping = var_mapping
+        graph_fci.rev_var_mapping = {column: sensor for sensor, column in var_mapping.items()}
+        graph_fci.struct = struct
 
 
     def run_fci_ctrl(graph_fci):
 
-        test = fisherz
+        test = kci
         graph_fci.remove_no_variance()
-        graph_fci.fci_no_knowledge(test)
-        graph_fci.build_background_knowledge()
-        graph_fci.fci_with_knowledge(test)
-        graph_fci.map_to_sensors()
 
-        trial_name = 'fisherz_cycles_graph1_varyflow_2'
-        save_loc = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs'
+        if graph_fci.graph['edges']:
+
+            graph_fci.build_background_knowledge()
+            graph_fci.fci_with_knowledge(test)
+        else:
+            graph_fci.fci_no_knowledge(test)
+
+        graph_fci.map_to_sensors()
+        graph_fci.categorise_edges()
+
+        trial_name = 'furn_test_'+str(graph_fci.struct)+'kci'
+        save_loc = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs\furn test'
         save_path = rf'{save_loc}\{trial_name}.xlsx'
         graph_fci.print_to_excel(save_path)
         # graph_fci.compare_with_knowledge()
@@ -49,23 +56,23 @@ class run_fci:
         graph_fci.data_np = graph_fci.data.to_numpy()
         graph_fci.vars = graph_fci.data.columns.tolist()
 
-
         dropped_sensors = [graph_fci.rev_var_mapping[column] for column in column_to_drop]
-        graph_fci.trim_whole_graph = {}
-        graph_fci.trim_whole_graph['nodes'] = [node for node in graph_fci.whole_graph['nodes'] if node not in dropped_sensors]
-        graph_fci.trim_whole_graph['edges'] = [(source,dest) for source, dest in graph_fci.whole_graph['edges'] if source not in dropped_sensors and dest not in dropped_sensors]
+        graph_fci.dropped_sensors = dropped_sensors
+        graph_fci.trim_graph = {}
+        graph_fci.trim_graph['nodes'] = [node for node in graph_fci.graph['nodes'] if node not in dropped_sensors]
+        graph_fci.trim_graph['edges'] = [(source,dest) for source, dest in graph_fci.graph['edges'] if source not in dropped_sensors and dest not in dropped_sensors]
 
 
     def fci_no_knowledge(graph_fci, test):
 
-        g, _ = fci(graph_fci.data_np, independence_test_method=test)
+        g, graph_fci.fci_edges = fci(graph_fci.data_np, independence_test_method=test)
         graph_fci.nodes_obj = g.get_nodes()
 
 
     def build_background_knowledge(graph_fci):
 
         knowledge = BackgroundKnowledge()
-        for itr_edge in graph_fci.trim_whole_graph['edges']:
+        for itr_edge in graph_fci.trim_graph['edges']:
 
             source_node_var = graph_fci.var_mapping[itr_edge[0]]
             source_node_ind = graph_fci.vars.index(source_node_var)
@@ -108,18 +115,30 @@ class run_fci:
             graph_fci.fci_edges_tup.append((source_sensor, dest_sensor))
 
 
-        print(len(graph_fci.fci_edges_tup))
-        print('**')
-        vis_graph = nx.DiGraph()
-        plt.figure(figsize=[5, 5])
-        vis_graph.add_nodes_from(graph_fci.whole_graph['nodes'])
-        vis_graph.add_edges_from(graph_fci.fci_edges_tup)
-        pos = nx.spring_layout(vis_graph)
-        nx.draw(vis_graph, pos, with_labels = True)
-        plt.show()
+        # print(len(graph_fci.fci_edges_tup))
+        # print('**')
+        # vis_graph = nx.DiGraph()
+        # plt.figure(figsize=[5, 5])
+        # vis_graph.add_nodes_from(graph_fci.graph['nodes'])
+        # vis_graph.add_edges_from(graph_fci.fci_edges_tup)
+        # pos = nx.spring_layout(vis_graph)
+        # nx.draw(vis_graph, pos, with_labels = True)
+        # plt.show()
         
 
         A=1
+
+
+    def categorise_edges(graph_fci):
+
+        data_edges = []
+        for itr_edge in graph_fci.fci_edges_tup:
+
+            if itr_edge not in graph_fci.trim_graph['edges']:
+
+                data_edges.append(itr_edge)
+
+        graph_fci.data_edges = data_edges
 
 
     def print_to_excel(graph_fci, save_path):
@@ -127,7 +146,7 @@ class run_fci:
         wb = Workbook()
         ws = wb.active
 
-        for row_index, row_data in enumerate(graph_fci.whole_graph['nodes'], start=1):
+        for row_index, row_data in enumerate(graph_fci.graph['nodes'], start=1):
 
             ws.cell(row=row_index, column=1, value=row_data)
 
@@ -148,20 +167,20 @@ class run_fci:
         
     #     for itr_edge in graph_fci.fci_edges_tup:
 
-    #         if itr_edge in graph_fci.trim_whole_graph['edges']:
+    #         if itr_edge in graph_fci.trim_graph['edges']:
 
     #             edges_comp['equivalent'].append(itr_edge)
 
-    #         elif (itr_edge[1], itr_edge[0]) in graph_fci.trim_whole_graph['edges']:
+    #         elif (itr_edge[1], itr_edge[0]) in graph_fci.trim_graph['edges']:
 
     #             edges_comp['reoriented'].append(itr_edge)
 
-    #         elif itr_edge not in graph_fci.trim_whole_graph['edges']:
+    #         elif itr_edge not in graph_fci.trim_graph['edges']:
 
     #             edges_comp['additional'].append(itr_edge)
 
     #     dropped_knowledge = []
-    #     for itr_edge in graph_fci.trim_whole_graph['edges']:
+    #     for itr_edge in graph_fci.trim_graph['edges']:
 
     #         if itr_edge not in graph_fci.fci_edges_tup:
 

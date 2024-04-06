@@ -18,8 +18,8 @@ from tools import tools
 
 
 
-# files = ['fisherz_alldata_varyflow',
-#          'fisherz_cycles_graph1_varyflow']
+# files = ['fisherz_cycles_graph1_varyflow',
+#          'fisherz_cycles_graph1_varyflow_2']
 # location = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs'
 
 # from tools import tools
@@ -83,15 +83,21 @@ data_files = ['NOC_stableFeedFlow_outputs.csv',
               'deltaP_increase_outputs.csv',
               'Fhn_sensorDrift_outputs.csv',
               'UAf_decrease_outputs.csv']
-file_ind = 1
+file_ind = 2
 data = pd.read_csv(rf'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Data\{data_files[file_ind]}')
 additional_vars = ['Time', 'T_atm', 'deltaP', 'Fair', 'T_cyc-T_reg', 'FV11']
 data = data.drop(columns = additional_vars)
 
-location = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs\fisherz_alldata_varyflow.xlsx'
-graph = {}
-graph['nodes'] , graph['edges'] = tools.read_graph_excel(location)
-from run_BIC import run_BIC
-bic = run_BIC(graph, data, var_mapping)
-bic.calc_BIC()
+from test_furn import test_furn_models
+
+model = test_furn_models(data, var_mapping)
+model.model_ctrl()
+
+
+# location = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs\fisherz_alldata_varyflow.xlsx'
+# graph = {}
+# graph['nodes'] , graph['edges'] = tools.read_graph_excel(location)
+# from run_BIC import run_BIC
+# bic = run_BIC(graph, data, var_mapping)
+# bic.calc_BIC()
 
