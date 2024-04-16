@@ -2,6 +2,7 @@
 import importlib
 import matplotlib.pyplot as plt
 import networkx as nx
+from handle_cycles import handle_cycles
 
 
 class graph_builder_class:
@@ -61,9 +62,12 @@ class graph_builder_class:
 
         graph.fuse_subgraphs()
 
-        from run_fci import run_fci
-        graph_fci = run_fci(graph)
-        graph_fci.run_fci_ctrl()
+        graph_cyc = handle_cycles(graph.whole_graph, graph.data, graph.var_mapping)
+        graph_cyc.handle_cycles_ctrl()
+
+        # from run_fci import run_fci
+        # graph_fci = run_fci(graph)
+        # graph_fci.run_fci_ctrl()
 
 
     def fuse_subgraphs(graph):

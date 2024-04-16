@@ -1,5 +1,6 @@
 
 from pgmpy.estimators import BayesianEstimator
+from pgmpy.metrics import log_likelihood_score
 from pgmpy.models import BayesianNetwork
 import math
 
@@ -28,8 +29,7 @@ class run_BIC:
         bayes_net.fit(model.data, n_jobs=4) 
  
 
-        log_likelihood = bayes_net.log_likelihood(model.data)
-        num_params = bayes_net.number_of_parameters()
+        log_likelihood = log_likelihood_score(bayes_net, model.data)
+        num_params = len(model.graph['nodes'])
         n = len(model.data)
-        model.BIC = -2 * log_likelihood + num_params * math.log(n)
-        print("BIC Score:", model.BIC)
+        model.BIC_score = -2 * log_likelihood + num_params * math.log(n)
