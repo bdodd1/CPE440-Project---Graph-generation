@@ -3,45 +3,58 @@ from test_fci_furn import run_fges
 import networkx as nx
 import matplotlib.pyplot as plt 
 from tools import tools 
+from PyIF import te_compute as te
+import numpy as np
 import pandas as pd
 
 
 
+from test_fci_furn import run_fges
+import networkx as nx
+import matplotlib.pyplot as plt 
+from tools import tools 
+import pandas as pd
+from itertools import combinations
 
-class test_furn_models:
+
+
+
+class test_react2_models:
 
     def __init__(model, data, var_mapping):
 
-        model.data = data
+        model.data_orig = data
         model.var_mapping = var_mapping
-        model.nodes = ['feed_feedstream/furn_1.F_3', 'feed_feedstream/furn_1.T_1', 'feed_fuel/v_1.F_5', 'furn_1.T_3', 'furn_1/react_2.T_2']
 
-        model.dummy_vars = ['furn_1/react_2.T_2_DUMMY']
-        model.valve_pos = ['Pos_1']
-        model.nodes += model.dummy_vars + model.valve_pos
-        model.data['T2_DUMMY'] = model.data['T2']
-        model.var_mapping['furn_1/react_2.T_2_DUMMY'] = 'T2_DUMMY'
 
 
     def model_ctrl(model):
 
-        columns = [model.var_mapping[sensor] for sensor in model.nodes]
-        model.required_data = model.data[columns]
+
         model.best_dags = []
 
         # pd.plotting.scatter_matrix(model.required_data, figsize=(10, 10))
         # plt.show()
 
-        model.forbid_edges = []
+
+        # Use the output of this to reset the fges inputs and forbid all control loops 
+        model.reset_fges_inputs()
         model.forbid_control_loops()
+
+        # Define required data
+        columns = [model.var_mapping[sensor] for sensor in model.nodes]
+        model.required_data = model.data[columns]
+
+        # Additional filters 
         model.forbid_backwards(True)
         model.forbid_diff_streams(True)
 
-
-        num_models = 9
+        num_models = 8
         for itr_model in range(num_models):
 
             getattr(model, 'struct_'+str(itr_model))()
+            model.edges.extend([('feed_feedstream/furn_1.F_3_DUMMY', 'Pos_3') , ('react_2.T_r_DUMMY', 'Pos_3') , ('react_2.T_r_DUMMY', 'Pos_2')])
+
 
             graph = {'nodes' : model.nodes,
                      'dummy vars' : model.dummy_vars,
@@ -68,7 +81,7 @@ class test_furn_models:
             ### Plot best DAG of MEC ###
             model.plot_best_dag_in_class(itr_model, fges_obj, False)
 
-            # Save best graph of MEC
+            ### Save best graph of MEC ###
             name = f'struct{str(itr_model)}_furn_test'
             location = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs\CPDAGs\fur test fges 1,3 forbid backwards'
             model.save_graphs(best_dag_data, name, location, False)
@@ -89,69 +102,60 @@ class test_furn_models:
         model.save_graphs(model.best_dags[unit_model_ind], name, location, False)
 
 
-
-
-
-    
-    # My opinion
+    # My opinion  
     def struct_0(model):
 
-        model.edges = [('feed_fuel/v_1.F_5', 'furn_1.T_3') , ('feed_feedstream/furn_1.F_3', 'furn_1/react_2.T_2') , ('feed_feedstream/furn_1.T_1', 'furn_1/react_2.T_2') , ('furn_1.T_3', 'furn_1/react_2.T_2')]
+        model.edges = [('feed_feedstream/furn_1.F_3', 'react_2.P_4') , ('furn_1/react_2.T_2', 'react_2.T_r')]
+        model.edges.extend([('Pos_3', 'react_2/v_3.F_sc') , ('Pos_2', 'react_1/v_2.F_rgc')])
 
 
-    # Addition of fuel flow to outlet temp (direct + indirect)
+    # Temp in causes P
     def struct_1(model):
 
-        model.edges = [('feed_fuel/v_1.F_5', 'furn_1.T_3') , ('feed_feedstream/furn_1.F_3', 'furn_1/react_2.T_2') , ('feed_feedstream/furn_1.T_1', 'furn_1/react_2.T_2') , ('furn_1.T_3', 'furn_1/react_2.T_2') , 
-                       ('feed_fuel/v_1.F_5', 'furn_1/react_2.T_2')]
+        model.edges = [('feed_feedstream/furn_1.F_3', 'react_2.P_4') , ('furn_1/react_2.T_2', 'react_2.T_r') , ('furn_1/react_2.T_2', 'react_2.P_4')]
+        model.edges.extend([('Pos_3', 'react_2/v_3.F_sc') , ('Pos_2', 'react_1/v_2.F_rgc')])
 
 
-    # Inlet temp sufficient to cause a change in furnace temp and outlet temp
+    # Additionally solid flow in causes solid flow out
     def struct_2(model):
 
-        model.edges = [('feed_fuel/v_1.F_5', 'furn_1.T_3') , ('feed_feedstream/furn_1.F_3', 'furn_1/react_2.T_2') , ('feed_feedstream/furn_1.T_1', 'furn_1/react_2.T_2') , ('furn_1.T_3', 'furn_1/react_2.T_2') , 
-                       ('feed_feedstream/furn_1.T_1', 'furn_1.T_3')]
+        model.edges = [('feed_feedstream/furn_1.F_3', 'react_2.P_4') , ('furn_1/react_2.T_2', 'react_2.T_r') , ('furn_1/react_2.T_2', 'react_2.P_4') , ('react_1/v_2.F_rgc', 'react_2/v_3.F_sc')]
+        model.edges.extend([('Pos_3', 'react_2/v_3.F_sc') , ('Pos_2', 'react_1/v_2.F_rgc')])
         
 
-    # Inlet temp sufficient to cause a change in furnace temp 
+    # Solid flow in causes solid flow out without T in causing P
     def struct_3(model):
 
-        model.edges = [('feed_fuel/v_1.F_5', 'furn_1.T_3') , ('feed_feedstream/furn_1.F_3', 'furn_1/react_2.T_2') , ('furn_1.T_3', 'furn_1/react_2.T_2') , ('feed_feedstream/furn_1.T_1', 'furn_1.T_3')]
-        
+        model.edges = [('feed_feedstream/furn_1.F_3', 'react_2.P_4') , ('furn_1/react_2.T_2', 'react_2.T_r') , ('react_1/v_2.F_rgc', 'react_2/v_3.F_sc')]
+        model.edges.extend([('Pos_3', 'react_2/v_3.F_sc') , ('Pos_2', 'react_1/v_2.F_rgc')])
 
-    # Inlet flow sufficient to cause a change in furnace temp and outlet temp
+
+    # Only T in causes T unit
     def struct_4(model):
 
-        model.edges = [('feed_fuel/v_1.F_5', 'furn_1.T_3') , ('feed_feedstream/furn_1.F_3', 'furn_1/react_2.T_2') , ('feed_feedstream/furn_1.T_1', 'furn_1/react_2.T_2') , ('furn_1.T_3', 'furn_1/react_2.T_2'),
-                       ('feed_feedstream/furn_1.F_3', 'furn_1.T_3')]
-        
+        model.edges = [('furn_1/react_2.T_2', 'react_2.T_r')]    
+        model.edges.extend([('Pos_3', 'react_2/v_3.F_sc') , ('Pos_2', 'react_1/v_2.F_rgc')]) 
 
-    # Inlet flow sufficient to cause a change in furnace temp 
+
+    # Only flow in causes P unit 
     def struct_5(model):
 
-        model.edges = [('feed_fuel/v_1.F_5', 'furn_1.T_3') , ('feed_feedstream/furn_1.T_1', 'furn_1/react_2.T_2') , ('furn_1.T_3', 'furn_1/react_2.T_2'),
-                       ('feed_feedstream/furn_1.F_3', 'furn_1.T_3')]
+        model.edges = [('feed_feedstream/furn_1.F_3', 'react_2.P_4')]    
+        model.edges.extend([('Pos_3', 'react_2/v_3.F_sc') , ('Pos_2', 'react_1/v_2.F_rgc')]) 
         
 
-    ### Lower knolwedge content ###
-    # 3 most important
+    # Only flow and valves 
     def struct_6(model):
 
-        model.edges = [('feed_fuel/v_1.F_5', 'furn_1.T_3') , ('feed_feedstream/furn_1.F_3', 'furn_1/react_2.T_2') , ('furn_1.T_3', 'furn_1/react_2.T_2')]
+        model.edges = [('Pos_3', 'react_2/v_3.F_sc') , ('Pos_2', 'react_1/v_2.F_rgc')] 
 
 
-    # 2 most important 
+    # Data only  
     def struct_7(model):
 
-        model.edges = [('feed_fuel/v_1.F_5', 'furn_1.T_3') , ('furn_1.T_3', 'furn_1/react_2.T_2')]
+        model.edges = [] 
 
     
-    # data only
-    def struct_8(model):
-
-        model.edges = []
-
-
 
 
     def find_best_model(model):
@@ -168,19 +172,35 @@ class test_furn_models:
         return best_model_ind
 
 
+    def reset_fges_inputs(model):
+
+        # Adding things that don't change 
+        model.nodes = ['react_1/v_2.F_rgc', 'react_2/v_3.F_sc', 'react_2.P_4', 'feed_feedstream/furn_1.F_3', 'furn_1/react_2.T_2', 'react_2.T_r']
+        model.dummy_vars = ['react_2.T_r_DUMMY', 'feed_feedstream/furn_1.F_3_DUMMY']
+        model.valve_pos = ['Pos_3', 'Pos_2']
+        model.nodes += model.dummy_vars + model.valve_pos
+        model.data = model.data_orig
+        model.data['T_r_DUMMY'] = model.data['T_r']
+        model.data['F3_DUMMY'] = model.data['F3']
+        model.var_mapping['react_2.T_r_DUMMY'] = 'T_r_DUMMY'
+        model.var_mapping['feed_feedstream/furn_1.F_3_DUMMY'] = 'F3_DUMMY'
+
+        model.dummy_valve_mapping = {'Pos_3': ['react_2.T_r_DUMMY', 'feed_feedstream/furn_1.F_3_DUMMY'],
+                                     'Pos_2' : ['react_2.T_r_DUMMY']}
+
+
     def forbid_control_loops(model):
 
-        for itr, itr_dummy in enumerate(model.dummy_vars):
-                
-            model.forbid_edges.extend([(itr_dummy, node) for node in model.nodes if node != model.valve_pos[itr]])
-            model.forbid_edges.extend([(node, itr_dummy) for node in model.nodes])
+        # Prevents connections from dummy vars to anything other than the valve pos, and only dummy vars can cause valve pos
+        model.forbid_edges = []
+        for valve, dummy_vars in model.dummy_valve_mapping.items():
 
-        for itr, itr_valve in enumerate(model.valve_pos):
-                
-            model.forbid_edges.extend([(node, itr_valve) for node in model.nodes if node != model.dummy_vars[itr]])
+            model.forbid_edges.extend([(node, valve) for node in model.nodes if node not in dummy_vars])
+            for itr_dummy_var in dummy_vars:
 
-        pass
-    
+                model.forbid_edges.extend([(node, itr_dummy_var) for node in model.nodes])
+                model.forbid_edges.extend([(itr_dummy_var, node) for node in model.nodes if node != valve])
+
 
     def forbid_backwards(model, activate):
 
@@ -188,9 +208,9 @@ class test_furn_models:
 
             # All structures abide by the forbidden backwards rule
             node_tiers = {}
-            node_tiers['out'] = ['furn_1/react_2.T_2']
-            node_tiers['unit'] = ['furn_1.T_3']
-            node_tiers['in'] = ['feed_feedstream/furn_1.F_3', 'feed_feedstream/furn_1.T_1', 'feed_fuel/v_1.F_5']
+            node_tiers['out'] = ['react_2/v_3.F_sc', 'Pos_3']
+            node_tiers['unit'] = ['react_2.T_r', 'react_2.P_4']
+            node_tiers['in'] = ['feed_feedstream/furn_1.F_3', 'furn_1/react_2.T_2', 'react_1/v_2.F_rgc', 'Pos_2']
             
             node_tiers_names = ['out', 'unit', 'in']
             for itr_tier in range(len(node_tiers_names)-1):
@@ -206,11 +226,10 @@ class test_furn_models:
 
     def forbid_diff_streams(model, activate):
 
-        if activate:
-
-            model.forbid_edges.extend([('feed_feedstream/furn_1.F_3', 'feed_fuel/v_1.F_5') , ('feed_fuel/v_1.F_5', 'feed_feedstream/furn_1.F_3') , ('feed_feedstream/furn_1.T_1', 'feed_fuel/v_1.F_5') ,
-                                       ('feed_fuel/v_1.F_5', 'feed_feedstream/furn_1.T_1') , ('feed_feedstream/furn_1.F_3', 'Pos_1') , ('Pos_1', 'feed_feedstream/furn_1.F_3') ,
-                                       ('feed_feedstream/furn_1.T_1', 'Pos_1') , ('Pos_1', 'feed_feedstream/furn_1.T_1')])
+        if activate:            
+            
+            model.forbid_edges.extend([('feed_feedstream/furn_1.F_3', 'react_1/v_2.F_rgc') , ('furn_1/react_2.T_2', 'react_1/v_2.F_rgc') , ('react_1/v_2.F_rgc', 'feed_feedstream/furn_1.F_3') , 
+                                       ('react_1/v_2.F_rgc', 'furn_1/react_2.T_2') , ('Pos_2', 'furn_1/react_2.T_2') , ('Pos_2', 'feed_feedstream/furn_1.F_3')])
             
 
 
@@ -277,5 +296,3 @@ class test_furn_models:
 
             save_path = rf'{location}\{name}.xlsx'
             tools.print_to_excel(graph, save_path)
-
-        

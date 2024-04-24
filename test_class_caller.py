@@ -145,31 +145,26 @@ data = pd.read_csv(rf'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Proj
 # model.model_ctrl()
 
 
-from test_react1 import test_react1_models
+# from test_react1 import test_react1_models
 
-model = test_react1_models(data, var_mapping)
+# model = test_react1_models(data, var_mapping)
+# model.model_ctrl()
+
+
+
+# from test_react2 import test_react2_models
+
+# model = test_react2_models(data, var_mapping)
+# model.model_ctrl()
+
+# from test_cab import test_cab_models
+
+# model = test_cab_models(data, var_mapping)
+# model.model_ctrl()
+
+
+from test_wgc import test_wgc_models
+
+model = test_wgc_models(data, var_mapping)
 model.model_ctrl()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# location = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs\fisherz_alldata_varyflow.xlsx'
-# graph = {}
-# graph['nodes'] , graph['edges'] = tools.read_graph_excel(location)
-# from run_BIC import run_BIC
-# bic = run_BIC(graph, data, var_mapping)
-# bic.calc_BIC()
 

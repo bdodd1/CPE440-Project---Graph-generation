@@ -1,6 +1,5 @@
 
-from test_fci_furn import run_fci_class
-from run_BIC import run_BIC
+from test_fci_furn import run_fges
 import networkx as nx
 import matplotlib.pyplot as plt 
 from tools import tools 
@@ -10,167 +9,207 @@ import pandas as pd
 
 
 
+from test_fci_furn import run_fges
+import networkx as nx
+import matplotlib.pyplot as plt 
+from tools import tools 
+import pandas as pd
+from itertools import combinations
+
+
+
 
 class test_distil_models:
 
     def __init__(model, data, var_mapping):
 
-        model.data = data
+        model.data_orig = data
         model.var_mapping = var_mapping
-        model.nodes = ['distil_1.T_20', 'distil_1.T_10', 'distil_1.T_fra', 'distil_1.P_5', 'v_11/prod_lightoil.F_lco' , 'v_10/prod_heavynaptha.F_hn', 'v_8/distil_1.F_reflux', 'distil_1/prod_slurry.F_slurry']
+
 
 
     def model_ctrl(model):
 
-        columns = [model.var_mapping[sensor] for sensor in model.nodes]
-        model.required_data = model.data[columns]
-        model.best_dags = []
-        graph_store = []
 
+        model.best_dags = []
+
+        # pd.plotting.scatter_matrix(model.required_data, figsize=(10, 10))
+        # plt.show()
+
+
+        # Test which variables should be dummy to the valve that is controlling an unmeasured var
+        model.control_loop_test(False)
 
 
         num_models = 9
-        for itr_model in range(1,num_models):
+        for itr_model in range(num_models):
+
+            model.reset_fges_inputs()
+            unmeas_dummy = ['distil_1.T_10', 'distil_1.T_fra']
+            test_valve = 'Pos_10'
+            model.add_additional_nodes(unmeas_dummy, test_valve)
+            test_valve = 'Pos_11'
+            model.add_additional_nodes(unmeas_dummy, test_valve)
+            model.forbid_control_loops()
+
+
+            # Additional filters 
+            model.forbid_diff_streams(True)
 
             getattr(model, 'struct_'+str(itr_model))()
-            graph  ={'nodes' : model.nodes,
-                     'edges' : model.edges}
+            model.edges.extend([('distil_1.T_fra_DUMMY', 'Pos_8') , ('distil_1.T_10_DUMMY', 'Pos_10') , ('distil_1.T_fra_DUMMY', 'Pos_10') , ('distil_1.T_10_DUMMY', 'Pos_11') , ('distil_1.T_fra_DUMMY', 'Pos_11')])
+
+            # Define required data
+            columns = [model.var_mapping[sensor] for sensor in model.nodes]
+            model.required_data = model.data[columns]
+
+            graph = {'nodes' : model.nodes,
+                     'dummy vars' : model.dummy_vars,
+                     'edges' : model.edges,
+                     'forbidden' : model.forbid_edges}
             
-            graph_fci = run_fci_class(graph, model.required_data, model.var_mapping, itr_model)
-            graph_fci.run_fci_ctrl()
+            fges_obj = run_fges(graph, model.required_data, model.var_mapping, itr_model)
+            fges_obj.run_fges_ctrl()
 
 
+            ### Plot CPDAG for struct ###
+            model.plot_CPDAG(itr_model, fges_obj, False)
 
 
-            ### For plotting CPDAG
-            vis_graph = nx.DiGraph()
-            plt.figure(figsize=[5, 5])
-            vis_graph.add_nodes_from(graph['nodes'])
-            vis_graph.add_edges_from(graph_fci.fci_edges_tup)
-            pos = nx.spring_layout(vis_graph)
-            nx.draw_networkx_edges(vis_graph, pos, edgelist=graph_fci.edges_cat['data'], edge_color='red', width=2)
-            nx.draw_networkx_edges(vis_graph, pos, edgelist=graph_fci.edges_cat['knowledge'], edge_color='black', width=2)
-            nx.draw_networkx_edges(vis_graph, pos, edgelist=graph_fci.undirect_edges, edge_color='blue', width=2)
-            nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=graph_fci.dropped_sensors)
-            nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=graph_fci.trim_graph['nodes'])
-            nx.draw_networkx_labels(vis_graph, pos, font_color='green')
-            plt.show()
+            best_dag_data = {'nodes' : model.nodes,
+                            'all edges' : fges_obj.best_dag,
+                            'knowledge' : fges_obj.edges_cat['knowledge'],
+                            'data directed' : fges_obj.edges_cat['data'],
+                            'redirected CPDAG' : [edge for edge in fges_obj.best_dag if edge in fges_obj.indirect_edges],
+                            'score' : fges_obj.best_score}
+            model.best_dags.append(best_dag_data)
+            print(fges_obj.best_score)
 
 
-            ### For plotting best DAG
-            knowledge = graph_fci.edges_cat['knowledge']
-            redirected_pdag = [edge for edge in graph_fci.best_dag if edge in graph_fci.undirect_edges or (edge[1], edge[0]) in graph_fci.undirect_edges]
-            directed_data = [edge for edge in graph_fci.best_dag if edge not in knowledge and edge not in redirected_pdag]
-            vis_graph = nx.DiGraph()
-            # plt.figure(figsize=[5, 5])
-            # vis_graph.add_nodes_from(graph['nodes'])
-            # vis_graph.add_edges_from(graph_fci.best_dag)
-            # pos = nx.spring_layout(vis_graph)
-            # nx.draw_networkx_edges(vis_graph, pos, edgelist=directed_data, edge_color='red', width=2)
-            # nx.draw_networkx_edges(vis_graph, pos, edgelist=knowledge, edge_color='black', width=2)
-            # nx.draw_networkx_edges(vis_graph, pos, edgelist=redirected_pdag, edge_color='blue', width=2)
-            # nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=graph_fci.dropped_sensors)
-            # nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=graph_fci.trim_graph['nodes'])
-            # nx.draw_networkx_labels(vis_graph, pos, font_color='green')
-            # plt.show()
+            ### Plot best DAG of MEC ###
+            model.plot_best_dag_in_class(itr_model, fges_obj, False)
 
-
-            ### For plotting direct CPDAG
-            # knowledge = graph_fci.edges_cat['knowledge']
-            # directed_data = [edge for edge in graph_fci.direct_edges if edge not in knowledge]
-            # vis_graph = nx.DiGraph()
-            # plt.figure(figsize=[5, 5])
-            # vis_graph.add_nodes_from(graph['nodes'])
-            # vis_graph.add_edges_from(graph_fci.direct_edges)
-            # pos = nx.spring_layout(vis_graph)
-            # nx.draw_networkx_edges(vis_graph, pos, edgelist=directed_data, edge_color='red', width=2)
-            # nx.draw_networkx_edges(vis_graph, pos, edgelist=knowledge, edge_color='black', width=2)
-            # nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=graph_fci.dropped_sensors)
-            # nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=graph_fci.trim_graph['nodes'])
-            # nx.draw_networkx_labels(vis_graph, pos, font_color='green')
-            # plt.show()
-
-
-            ### For saving graphs - edit edges and save name 
-            # graph = {'nodes' : model.nodes,
-            #          'edges' : graph_fci.fci_edges_tup}
-            # trial_name = f'furn_test_{str(itr_model)}'
-            # save_loc = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs\CPDAGs\furn test fges semBIC pen 5'
-            # save_path = rf'{save_loc}\{trial_name}.xlsx'
-            # tools.print_to_excel(graph, save_path)
-
-
-           
-
-            ### For finding best dag 
-            model.best_dags.append({'all edges' : graph_fci.best_dag,
-                                      'knowledge' : knowledge,
-                                      'data directed' : directed_data,
-                                      'redirected CPDAG' : redirected_pdag,
-                                    'score' : graph_fci.best_score})
-            print(graph_fci.best_score)
-
-
-            ### For direct CPDAG
-            # model.best_dags.append({'all edges' : graph_fci.direct_edges,
-            #                         'knowledge' : knowledge,
-            #                         'data directed' : directed_data,
-            #                         'score' : graph_fci.dag_score})
-            # print(graph_fci.dag_score)
-
-
-            if itr_model == 0:
-
-                model.nodes.remove('distil_1.T_20_DUMMY')
-                model.nodes.remove('distil_1.T_10_DUMMY')
-                del model.var_mapping['distil_1.T_20_DUMMY']
-                del model.var_mapping['distil_1.T_10_DUMMY']
-                model.required_data = model.required_data.drop(columns = ['T_20_DUMMY', 'T_10_DUMMY'])
-
-
+            ### Save best graph of MEC ###
+            name = f'struct{str(itr_model)}_furn_test'
+            location = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs\CPDAGs\fur test fges 1,3 forbid backwards'
+            model.save_graphs(best_dag_data, name, location, False)
+  
 
         unit_model_ind = model.find_best_model()
-
-
+        model.unit_model_ind = unit_model_ind
         print(f'Best score: {model.best_dags[unit_model_ind]["score"]}')
 
 
-        ### Visualise best DAG for all directed CPDAGs for each struct
-        # vis_graph = nx.DiGraph()
-        # plt.figure(figsize=[5, 5])
-        # vis_graph.add_nodes_from(model.nodes)
-        # vis_graph.add_edges_from(model.best_dags[unit_model_ind]['all edges'])
-        # pos = nx.spring_layout(vis_graph)
-        # nx.draw_networkx_edges(vis_graph, pos, edgelist=model.best_dags[unit_model_ind]['data directed'], edge_color='red', width=2)
-        # nx.draw_networkx_edges(vis_graph, pos, edgelist=model.best_dags[unit_model_ind]['knowledge'], edge_color='black', width=2)
-        # nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=graph_fci.dropped_sensors)
-        # nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=graph_fci.trim_graph['nodes'])
-        # nx.draw_networkx_labels(vis_graph, pos, font_color='green')
-        # plt.show()
-
-        ### Visualise best DAG from all CPDAGs for each struct
-        vis_graph = nx.DiGraph()
-        plt.figure(figsize=[5, 5])
-        vis_graph.add_nodes_from(model.nodes)
-        vis_graph.add_edges_from(model.best_dags[unit_model_ind]['all edges'])
-        pos = nx.spring_layout(vis_graph)
-        nx.draw_networkx_edges(vis_graph, pos, edgelist=model.best_dags[unit_model_ind]['data directed'], edge_color='red', width=2)
-        nx.draw_networkx_edges(vis_graph, pos, edgelist=model.best_dags[unit_model_ind]['knowledge'], edge_color='black', width=2)
-        nx.draw_networkx_edges(vis_graph, pos, edgelist=model.best_dags[unit_model_ind]['redirected CPDAG'], edge_color='blue', width=2)
-        nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=graph_fci.dropped_sensors)
-        nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=graph_fci.trim_graph['nodes'])
-        nx.draw_networkx_labels(vis_graph, pos, font_color='green')
-        plt.show()
+        ### Visualise best DAG from all CPDAGs for each struct ###
+        model.plot_best_dag_for_model(unit_model_ind, fges_obj, True)
 
 
-        ### Save best model for unit
-        # graph = {'nodes' : model.nodes,
-        #          'edges' : unit_model_struct}
-        # trial_name = 'furn_test_best_1_1'
-        # save_loc = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs'
-        # save_path = rf'{save_loc}\{trial_name}.xlsx'
-        # tools.print_to_excel(graph, save_path)
+        ### Save best model for unit ###
+        name = f'struct{str(itr_model)}_furn_test_best'
+        location = r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\Graphs\CPDAGs\fur test fges 1,3 forbid backwards'
+        model.save_graphs(model.best_dags[unit_model_ind], name, location, False)
 
+
+
+
+    # T psuedonodes - worst, extra dimensionality 
+    def struct_0(model):
+
+        model.edges = [('distil_1.T_20', 'distil_1.T_10') , ('distil_1.T_10', 'distil_1.T_fra') , ('distil_1.T_fra', 'distil_1.T_10_DUMMYloop') , ('distil_1.T_10_DUMMYloop', 'distil_1.T_20_DUMMYloop'),
+                        ('v_8/distil_1.F_reflux', 'distil_1.T_fra') , ('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , 
+                        ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , 
+                        ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]
+        model.edges.extend([('Pos_8', 'v_8/distil_1.F_reflux') , ('Pos_10', 'v_10/prod_heavynaptha.F_hn') , ('Pos_11', 'v_11/prod_lightoil.F_lco')])
+        model.add_dummy('distil_1.T_20')
+        model.add_dummy('distil_1.T_10')
+        model.forbid_backwards([], True)
+        model.forbid_edges.extend([('distil_1.T_10_DUMMYloop', node) for node in model.nodes if node != 'distil_1.T_20_DUMMYloop'])
+        model.forbid_edges.extend([(node, 'distil_1.T_10_DUMMYloop') for node in model.nodes if node != 'distil_1.T_fra'])
+        model.forbid_edges.extend([('distil_1.T_20_DUMMYloop', node) for node in model.nodes])
+        model.forbid_edges.extend([(node, 'distil_1.T_20_DUMMYloop') for node in model.nodes if node != 'distil_1.T_10_DUMMYloop'])
+
+
+    # Reboil/ in controlled with reflux affecting T - next worst
+    def struct_1(model):
+
+        model.edges = [('distil_1.T_20', 'distil_1.T_10') , ('distil_1.T_10', 'distil_1.T_fra') ,
+                        ('v_8/distil_1.F_reflux', 'distil_1.T_fra') , ('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , 
+                        ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , 
+                        ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]
+        model.edges.extend([('Pos_8', 'v_8/distil_1.F_reflux') , ('Pos_10', 'v_10/prod_heavynaptha.F_hn') , ('Pos_11', 'v_11/prod_lightoil.F_lco')])
+        model.forbid_backwards([], True)
+
+
+    # Reflux controlled - joint best 
+    def struct_2(model):
+
+        model.edges = [('distil_1.T_fra', 'distil_1.T_10') , ('distil_1.T_10', 'distil_1.T_20') , 
+                        ('v_8/distil_1.F_reflux', 'distil_1.T_fra') , ('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , 
+                        ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , 
+                        ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]
+        model.edges.extend([('Pos_8', 'v_8/distil_1.F_reflux') , ('Pos_10', 'v_10/prod_heavynaptha.F_hn') , ('Pos_11', 'v_11/prod_lightoil.F_lco')])
+        model.forbid_backwards([], True)
+
+
+    # In controlled - F reflux doesnt affect T - same struct as 1
+    def struct_3(model):
+
+        model.edges = [('distil_1.T_20', 'distil_1.T_10') , ('distil_1.T_10', 'distil_1.T_fra') ,
+                        ('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , 
+                        ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , 
+                        ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]
+        model.edges.extend([('Pos_8', 'v_8/distil_1.F_reflux') , ('Pos_10', 'v_10/prod_heavynaptha.F_hn') , ('Pos_11', 'v_11/prod_lightoil.F_lco')])
+        model.forbid_backwards([], True)
+        
+
+    # Let data decide - same struct as 2
+    def struct_4(model):
+
+        model.edges = [('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , 
+                        ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , 
+                        ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]
+        model.edges.extend([('Pos_8', 'v_8/distil_1.F_reflux') , ('Pos_10', 'v_10/prod_heavynaptha.F_hn') , ('Pos_11', 'v_11/prod_lightoil.F_lco')])
+        model.forbid_backwards([], True)
+
+
+    # Gone with best temp strat - reflux controlled
+
+    # Product flows affect closest T and P (no reflux knowledge)
+    def struct_5(model):
+
+        model.edges = [('v_10/prod_heavynaptha.F_hn', 'distil_1.T_10') , ('v_10/prod_heavynaptha.F_hn', 'distil_1.P_5') , 
+                        ('v_11/prod_lightoil.F_lco', 'distil_1.T_20') , ('v_11/prod_lightoil.F_lco', 'distil_1.P_5') , ('distil_1/prod_slurry.F_slurry', 'distil_1.T_20') , 
+                        ('distil_1/prod_slurry.F_slurry', 'distil_1.P_5')]
+        model.edges.extend([('Pos_8', 'v_8/distil_1.F_reflux') , ('Pos_10', 'v_10/prod_heavynaptha.F_hn') , ('Pos_11', 'v_11/prod_lightoil.F_lco')])
+        model.forbid_backwards([('v_10/prod_heavynaptha.F_hn', 'distil_1.T_10') , ('v_10/prod_heavynaptha.F_hn', 'distil_1.P_5') , 
+                        ('v_11/prod_lightoil.F_lco', 'distil_1.T_20') , ('v_11/prod_lightoil.F_lco', 'distil_1.P_5') , ('distil_1/prod_slurry.F_slurry', 'distil_1.T_20') , 
+                        ('distil_1/prod_slurry.F_slurry', 'distil_1.P_5')], True)
+        
+    
+    # Product flows affect closest T and P (reflux knowledge)
+    def struct_6(model):
+
+        model.edges = [('distil_1.T_fra', 'distil_1.T_10') , ('distil_1.T_10', 'distil_1.T_20') , ('v_8/distil_1.F_reflux', 'distil_1.T_fra') , 
+                       ('v_10/prod_heavynaptha.F_hn', 'distil_1.T_10') , ('v_10/prod_heavynaptha.F_hn', 'distil_1.P_5') , 
+                        ('v_11/prod_lightoil.F_lco', 'distil_1.T_20') , ('v_11/prod_lightoil.F_lco', 'distil_1.P_5') , ('distil_1/prod_slurry.F_slurry', 'distil_1.T_20') , 
+                        ('distil_1/prod_slurry.F_slurry', 'distil_1.P_5')]
+        model.edges.extend([('Pos_8', 'v_8/distil_1.F_reflux') , ('Pos_10', 'v_10/prod_heavynaptha.F_hn') , ('Pos_11', 'v_11/prod_lightoil.F_lco')])
+        model.forbid_backwards([('v_10/prod_heavynaptha.F_hn', 'distil_1.T_10') , ('v_10/prod_heavynaptha.F_hn', 'distil_1.P_5') , 
+                        ('v_11/prod_lightoil.F_lco', 'distil_1.T_20') , ('v_11/prod_lightoil.F_lco', 'distil_1.P_5') , ('distil_1/prod_slurry.F_slurry', 'distil_1.T_20') , 
+                        ('distil_1/prod_slurry.F_slurry', 'distil_1.P_5')], True)
+
+
+
+    def struct_7(model):
+
+        model.edges = [('Pos_8', 'v_8/distil_1.F_reflux') , ('Pos_10', 'v_10/prod_heavynaptha.F_hn') , ('Pos_11', 'v_11/prod_lightoil.F_lco')]
+        model.forbid_backwards([], True)
+
+    
+    def struct_8(model):
+
+        model.edges = []
+        model.forbid_backwards([], True) 
 
 
 
@@ -187,90 +226,253 @@ class test_distil_models:
 
         return best_model_ind
 
-    
+
+    def add_dummy(model, var):
+
+        dummy_name = var+'_DUMMYloop'
+        model.nodes.append(dummy_name)
+        col_name = model.var_mapping[var]
+        col_dummy_name = col_name + '_DUMMYloop'
+        model.data[col_dummy_name] = model.data[col_name]
+        model.var_mapping[dummy_name] = col_dummy_name
+
+
+    def reset_fges_inputs(model):
+
+        # Adding things that don't change 
+        model.nodes = ['distil_1.T_20', 'distil_1.T_10', 'distil_1.T_fra', 'distil_1.P_5', 'v_11/prod_lightoil.F_lco' , 'v_10/prod_heavynaptha.F_hn', 'v_8/distil_1.F_reflux', 
+                       'distil_1/prod_slurry.F_slurry']
+        # model.dummy_vars = ['distil_1.T_fra_DUMMY', 'distil_1.T_10_DUMMY']
+        model.dummy_vars = ['distil_1.T_fra_DUMMY']
+        # model.valve_pos = ['Pos_8', 'Pos_11']
+        model.valve_pos = ['Pos_8']
+        model.nodes += model.dummy_vars + model.valve_pos
+        model.data = model.data_orig
+        model.data['T_fra_DUMMY'] = model.data['T_fra']
+        # model.data['T_10_DUMMY'] = model.data['T_10']
+        model.var_mapping['distil_1.T_fra_DUMMY'] = 'T_fra_DUMMY'
+        # model.var_mapping['distil_1.T_10_DUMMY'] = 'T_10_DUMMY'
+
+
+        # model.dummy_valve_mapping = {'Pos_8': ['distil_1.T_fra_DUMMY'],
+        #                              'Pos_11' : ['distil_1.T_10_DUMMY']}
+        model.dummy_valve_mapping = {'Pos_8': ['distil_1.T_fra_DUMMY']}
+
+
+
+    def add_additional_nodes(model, node_list, test_valve):
+
+        model.dummy_valve_mapping[test_valve] = []
+        dup_dummy_var = []
+        for itr_var in node_list:
+
+            dummy_var_name = itr_var+'_DUMMY'
+            if dummy_var_name not in model.dummy_vars:
+
+                column_name = model.var_mapping[itr_var]
+                dummy_col_name = column_name+'_DUMMY'
+                # if dummy_var_name in model.dummy_vars:
+                    
+                #     dummy_var_name += '2'
+                #     dummy_col_name += '2'
+
+                model.dummy_vars.append(dummy_var_name)
+                model.nodes.append(dummy_var_name)            
+                model.data[dummy_col_name] = model.data[column_name]
+                model.var_mapping[dummy_var_name] = dummy_col_name
+
+            else:
+
+                dup_dummy_var.append(dummy_var_name)
+
+            model.dummy_valve_mapping[test_valve].append(dummy_var_name)
+
+        model.valve_pos.append(test_valve)
+        model.nodes.append(test_valve)
+
+        return dup_dummy_var
+
+
+    def control_loop_test(model, activate):
+
+        if activate: 
+
+            potential_vars = ['distil_1.T_20', 'distil_1.T_10', 'distil_1.T_fra', 'distil_1.P_5', 'v_11/prod_lightoil.F_lco' , 'v_10/prod_heavynaptha.F_hn', 'v_8/distil_1.F_reflux', 
+                              'distil_1/prod_slurry.F_slurry']
+            test_valve = 'Pos_10'
+            # test_valve = 'Pos_11'
+            model.test_valve = test_valve
+
+            # Get combinations of potential dummy vars 
+            all_combinations = []
+            #for itr in range(1, len(potential_vars) + 1):
+            for itr in range(1, 4):
+
+                comb_at_itr = list(combinations(potential_vars, itr))
+                all_combinations.extend(comb_at_itr)
+
+            # Check score of every combination
+            scores = []
+            for itr_comb in all_combinations:
+
+                # Reset things inputs to thngs that don't change - more long winded but its safer 
+                model.reset_fges_inputs()
+
+                # Add things which are changing every test
+                dup_dummy_var = model.add_additional_nodes(itr_comb, test_valve)
+                model.forbid_control_loops()
+
+                # Define required data
+                columns = [model.var_mapping[sensor] for sensor in model.nodes]
+                model.required_data = model.data[columns]
+
+                # Arbitrary comparison struct with appended dummy var-valve reationships 
+                model.struct_3()
+                connect_dummy_vars = model.dummy_vars[2:] + dup_dummy_var
+                model.edges.extend([(dummy_var, test_valve) for dummy_var in connect_dummy_vars])
+                model.edges.extend([('distil_1.T_fra_DUMMY', 'Pos_8') , ('distil_1.T_10_DUMMY', 'Pos_11')])
+
+                graph = {'nodes' : model.nodes,
+                        'dummy vars' : model.dummy_vars,
+                        'edges' : model.edges,
+                        'forbidden' : model.forbid_edges}
+                fges_obj = run_fges(graph, model.required_data, model.var_mapping, 'CL test')
+                fges_obj.run_fges_ctrl()
+                scores.append(fges_obj.best_score)
+
+                print(itr_comb)
+                print(fges_obj.best_score)
+                print('*****')
+                model.plot_CPDAG(str(len(itr_comb)), fges_obj, False)
+
+
+            highest_score = max(scores)
+            best_comb_ind = [itr for itr, score in enumerate(scores) if score == highest_score]
+            len_best_combs = [len(all_combinations[comb]) for comb in best_comb_ind]
+            model.unmeas_dummy = all_combinations[best_comb_ind[len_best_combs.index(min(len_best_combs))]]
+
+            print('***')
+            print(f'Best combination: {model.unmeas_dummy}')
+            print(f'Best score: {highest_score}')
+            print('***')
+
+            pass
+
+
+
+
+    def forbid_control_loops(model):
+
+        # Prevents connections from dummy vars to anything other than the valve pos, and only dummy vars can cause valve pos
+
+        model.forbid_edges = []
+        for valve, dummy_vars in model.dummy_valve_mapping.items():
+
+            model.forbid_edges.extend([(node, valve) for node in model.nodes if node not in dummy_vars])
+            for itr_dummy_var in dummy_vars:
+
+                model.forbid_edges.extend([(node, itr_dummy_var) for node in model.nodes])
+                model.forbid_edges.extend([(itr_dummy_var, node) for node in model.nodes if node != valve])
+
+
+    def forbid_backwards(model, exclude_list, activate):
+
+        if activate:
+
+            # Forbids all going backwards 
+            node_tiers = {}
+            node_tiers['out'] = ['v_11/prod_lightoil.F_lco' , 'v_10/prod_heavynaptha.F_hn', 'distil_1/prod_slurry.F_slurry', 'Pos_10', 'Pos_11']
+            node_tiers['unit'] = ['distil_1.T_20', 'distil_1.T_10', 'distil_1.T_fra', 'distil_1.P_5']
+            node_tiers['in'] = ['v_8/distil_1.F_reflux', 'Pos_8']
+            
+            node_tiers_names = ['out', 'unit', 'in']
+            for itr_tier in range(len(node_tiers_names)-1):
+
+                curr_tier = node_tiers_names[itr_tier]
+                next_tiers = node_tiers_names[itr_tier+1:]
+                for itr_next_tier in next_tiers:
+                    
+                    for itr_tier_node in node_tiers[curr_tier]:
+
+                        model.forbid_edges.extend([(itr_tier_node, next_tier_node) for next_tier_node in node_tiers[itr_next_tier] if (itr_tier_node, next_tier_node) not in exclude_list])
 
             
-# ['distil_1.T_20', 'distil_1.T_10', 'distil_1.T_fra', 'distil_1.P_5', 'v_11/prod_lightoil.F_lco' , 'v_10/prod_heavynaptha.F_hn', 'v_8/distil_1.F_reflux', 'distil_1/prod_slurry.F_slurry']
-    
-    # My opinion psuedonodes
-    def struct_0(model):
 
-        model.dummy_list = ['distil_1.T_20_DUMMY', 'distil_1.T_10_DUMMY']
-        model.nodes.extend(['distil_1.T_20_DUMMY', 'distil_1.T_10_DUMMY'])
-        model.edges = [('distil_1.T_20', 'distil_1.T_10') , ('distil_1.T_10', 'distil_1.T_fra') , ('distil_1.T_fra', 'distil_1.T_10_DUMMY') , ('distil_1.T_10_DUMMY', 'distil_1.T_20_DUMMY'),
-                        ('v_8/distil_1.F_reflux', 'distil_1.T_fra') , ('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , 
-                        ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]
+    def forbid_diff_streams(model, activate):
+
+        if activate:            
+            
+            model.forbid_edges.extend([('v_10/prod_heavynaptha.F_hn', 'v_11/prod_lightoil.F_lco') , ('v_11/prod_lightoil.F_lco', 'v_10/prod_heavynaptha.F_hn') , 
+                                       ('v_10/prod_heavynaptha.F_hn', 'distil_1/prod_slurry.F_slurry') , ('distil_1/prod_slurry.F_slurry', 'v_10/prod_heavynaptha.F_hn') ,
+                                       ('v_11/prod_lightoil.F_lco', 'distil_1/prod_slurry.F_slurry') , ('distil_1/prod_slurry.F_slurry', 'v_11/prod_lightoil.F_lco') , 
+                                       ('Pos_10' , 'v_11/prod_lightoil.F_lco') , ('Pos_10' , 'distil_1/prod_slurry.F_slurry') , 
+                                       ('Pos_11' , 'v_10/prod_heavynaptha.F_hn') , ('Pos_11' , 'distil_1/prod_slurry.F_slurry')])
+            
 
 
-        model.required_data.loc[:,'T_10_DUMMY'] = model.required_data['T_10']
-        model.required_data.loc[:,'T_20_DUMMY'] = model.required_data['T_20']
+    def plot_CPDAG(model, itr_model, fges_obj, activate):
 
-        model.var_mapping['distil_1.T_20_DUMMY'] = 'T_20_DUMMY'
-        model.var_mapping['distil_1.T_10_DUMMY'] = 'T_10_DUMMY'
+        if activate:
+
+            vis_graph = nx.DiGraph()
+            plt.figure(figsize=[5, 5])
+            plt.title(f'CPDAG: {str(itr_model)}')
+            vis_graph.add_nodes_from(fges_obj.graph['nodes'])
+            vis_graph.add_edges_from(fges_obj.fges_edges)
+            pos = nx.spring_layout(vis_graph)
+            nx.draw_networkx_edges(vis_graph, pos, edgelist=fges_obj.edges_cat['data'], edge_color='red', width=2)
+            nx.draw_networkx_edges(vis_graph, pos, edgelist=fges_obj.edges_cat['knowledge'], edge_color='black', width=2)
+            nx.draw_networkx_edges(vis_graph, pos, edgelist=fges_obj.indirect_edges, edge_color='blue', width=2)
+            nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=fges_obj.dropped_sensors)
+            nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=fges_obj.trim_graph['nodes'])
+            nx.draw_networkx_labels(vis_graph, pos, font_color='green')
+            plt.show()
+
+
+    def plot_best_dag_in_class(model, itr_model, fges_obj, activate):
+
+        if activate:
+
+            vis_graph = nx.DiGraph()
+            plt.figure(figsize=[5, 5])
+            plt.title(f'best DAG of MEC: {str(itr_model)}')
+            vis_graph.add_nodes_from(fges_obj.graph['nodes'])
+            vis_graph.add_edges_from(fges_obj.best_dag)
+            pos = nx.spring_layout(vis_graph)
+            nx.draw_networkx_edges(vis_graph, pos, edgelist=fges_obj.edges_cat['data'], edge_color='red', width=2)
+            nx.draw_networkx_edges(vis_graph, pos, edgelist=fges_obj.edges_cat['knowledge'], edge_color='black', width=2)
+            nx.draw_networkx_edges(vis_graph, pos, edgelist=[edge for edge in fges_obj.best_dag if edge in fges_obj.indirect_edges], edge_color='blue', width=2)
+            nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=fges_obj.dropped_sensors)
+            nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=fges_obj.trim_graph['nodes'])
+            nx.draw_networkx_labels(vis_graph, pos, font_color='green')
+            plt.show()
+
+
+    def plot_best_dag_for_model(model, unit_model_ind, fges_obj, activate):
+        
+        if activate:
+
+            vis_graph = nx.DiGraph()
+            plt.figure(figsize=[5, 5])
+            plt.title(f'Best DAG for unit: {str(unit_model_ind)}')
+            vis_graph.add_nodes_from(model.best_dags[unit_model_ind]['nodes'])
+            vis_graph.add_edges_from(model.best_dags[unit_model_ind]['all edges'])
+            pos = nx.spring_layout(vis_graph)
+            nx.draw_networkx_edges(vis_graph, pos, edgelist=model.best_dags[unit_model_ind]['data directed'], edge_color='red', width=2)
+            nx.draw_networkx_edges(vis_graph, pos, edgelist=model.best_dags[unit_model_ind]['knowledge'], edge_color='black', width=2)
+            nx.draw_networkx_edges(vis_graph, pos, edgelist=model.best_dags[unit_model_ind]['redirected CPDAG'], edge_color='blue', width=2)
+            nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=fges_obj.dropped_sensors)
+            nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=fges_obj.trim_graph['nodes'])
+            nx.draw_networkx_labels(vis_graph, pos, font_color='green')
+            plt.show()
+
+
+    def save_graphs(model, graph, name, location, activate):
+
+        if activate:
+
+            save_path = rf'{location}\{name}.xlsx'
+            tools.print_to_excel(graph, save_path)
+
         
 
-
-
-    # My opinion psuedonodes TE
-    def struct_1(model):
-
-        model.edges = [('v_8/distil_1.F_reflux', 'distil_1.T_fra') , ('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , 
-                        ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]
-        
-        # T20_T10_te = te.te_compute(model.required_data['T_20'].to_numpy(), model.required_data['T_10'].to_numpy(), safetyCheck=False) 
-        # T10_T20_te = te.te_compute(model.required_data['T_10'].to_numpy(), model.required_data['T_20'].to_numpy(), safetyCheck=False) 
-        # T10_Tfra_te = te.te_compute(model.required_data['T_10'].to_numpy(), model.required_data['T_fra'].to_numpy(), safetyCheck=False) 
-        # Tfra_T10_te = te.te_compute(model.required_data['T_fra'].to_numpy(), model.required_data['T_10'].to_numpy(), safetyCheck=False) 
-
-        model.edges.extend([('distil_1.T_20', 'distil_1.T_10') , ('distil_1.T_10', 'distil_1.T_fra')])
-
-
-
-    # Reflux has greater effect
-    def struct_2(model):
-
-        model.edges = [('v_8/distil_1.F_reflux', 'distil_1.T_fra') , ('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , 
-                        ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry') , 
-                        ('distil_1.T_fra', 'distil_1.T_10') , ('distil_1.T_10', 'distil_1.T_20')]
-        
-
-    # Reboil has a greater effect excluded but put in main 
-
-    # Try a struct where F relfux doesn't affect things as much 
-
-    # Let data dictate temp direction 
-    def struct_3(model):
-
-        model.edges = [('v_8/distil_1.F_reflux', 'distil_1.T_fra') , ('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , 
-                        ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]
-        
-
-    # Only certain about T,P effects on prod flow
-    def struct_4(model):
-
-        model.edges = [('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , 
-                       ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry') , ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]        
-
-
-    # Only certain about T
-    def struct_5(model):
-
-        model.edges = [('distil_1.T_10', 'v_10/prod_heavynaptha.F_hn') , ('distil_1.T_20', 'v_11/prod_lightoil.F_lco') , ('distil_1.T_20', 'distil_1/prod_slurry.F_slurry')]  
-        
-
-    # Only certain about P
-    def struct_6(model):
-
-        model.edges = [('distil_1.P_5', 'v_10/prod_heavynaptha.F_hn'), ('distil_1.P_5', 'v_11/prod_lightoil.F_lco') , ('distil_1.P_5', 'distil_1/prod_slurry.F_slurry')]  
-
-
-    # Only certain about T up the column 
-    def struct_7(model):
-
-        model.edges = [('v_8/distil_1.F_reflux', 'distil_1.T_fra') , ('distil_1.T_20', 'distil_1.T_10') , ('distil_1.T_10', 'distil_1.T_fra')]
-
-    
-    # data only
-    def struct_8(model):
-
-        model.edges = []

@@ -32,106 +32,104 @@ from tools import tools
 
 
 
-class run_fci_class:
+class run_fges:
 
-    def __init__(graph_fci, graph, data, var_mapping, struct):
+    def __init__(fges_obj, graph, data, var_mapping, struct):
 
-        graph_fci.data_orig = data
-        graph_fci.graph = graph
-        graph_fci.var_mapping = var_mapping
-        graph_fci.rev_var_mapping = {column: sensor for sensor, column in var_mapping.items()}
-        graph_fci.struct = struct
-        graph_fci.MVP_params = [1, 3, True]
-        graph_fci.SemBIC_pen = 10
-        graph_fci.EBIC_gamma = 0.95
+        fges_obj.data_orig = data
+        fges_obj.graph = graph
+        fges_obj.var_mapping = var_mapping
+        fges_obj.rev_var_mapping = {column: sensor for sensor, column in var_mapping.items()}
+        fges_obj.struct = struct
+        fges_obj.MVP_params = [1, 3, True]
 
 
-    def run_fci_ctrl(graph_fci):
+    def run_fges_ctrl(fges_obj):
 
-        graph_fci.remove_no_variance()
-        graph_fci.adj_dtype()
+        fges_obj.remove_no_variance()
+        fges_obj.adj_dtype()
 
-        graph_fci.kn = td.Knowledge()
-        graph_fci.build_knowledge()
+        fges_obj.build_knowledge()
+        fges_obj.perform_fges()
+        fges_obj.categorise_edges()
+        fges_obj.calc_avg_deg()
 
-        graph_fci.perform_fci()
-        graph_fci.categorise_edges()
-        # graph_fci.calc_knowledge_retention()
-        graph_fci.calc_avg_deg()
-
-        graph_fci.generate_dags()
-        graph_fci.find_best_dag()
-        # graph_fci.only_direct_dag()
+        fges_obj.generate_dags()
+        fges_obj.find_best_dag()
 
 
-    def remove_no_variance(graph_fci):
+    def remove_no_variance(fges_obj):
 
         column_to_drop = []
-        for itr_col in graph_fci.data_orig.columns:
+        dummy_to_drop = []
+        for itr_col in fges_obj.data_orig.columns:
 
-            var_col = graph_fci.data_orig[itr_col].var()
-            if var_col < 0.000001:
+            var_col = fges_obj.data_orig[itr_col].var()
+            if var_col < 0.00000001:
 
                 column_to_drop.append(itr_col)
+                if itr_col in fges_obj.graph['dummy vars']:
 
-        graph_fci.data = graph_fci.data_orig.drop(columns=column_to_drop)
-        graph_fci.data_np = graph_fci.data.to_numpy()
-        graph_fci.vars = graph_fci.data.columns.tolist()
-
-        dropped_sensors = [graph_fci.rev_var_mapping[column] for column in column_to_drop]
-        graph_fci.dropped_sensors = dropped_sensors
-        graph_fci.trim_graph = {}
-        graph_fci.trim_graph['nodes'] = [node for node in graph_fci.graph['nodes'] if node not in dropped_sensors]
-        graph_fci.trim_graph['edges'] = [(source,dest) for source, dest in graph_fci.graph['edges'] if source not in dropped_sensors and dest not in dropped_sensors]
-        graph_fci.trim_graph['forbidden'] = [(source,dest) for source, dest in graph_fci.graph['forbidden'] if source not in dropped_sensors and dest not in dropped_sensors]
+                    dummy_to_drop.append(itr_col)
 
 
-    def adj_dtype(graph_fci):
+        fges_obj.data = fges_obj.data_orig.drop(columns=column_to_drop)
+        fges_obj.vars = fges_obj.data.columns.tolist()
 
-        for itr_var in graph_fci.vars:
+        # dropped_sensors is all sensors, and drop_dummy_sensors is just dummy sensors
+        fges_obj.dropped_sensors = [fges_obj.rev_var_mapping[column] for column in column_to_drop]
+        fges_obj.drop_dummy_sensors = [fges_obj.rev_var_mapping[column] for column in dummy_to_drop]
 
-            dtype = graph_fci.data[itr_var].dtype
+        fges_obj.trim_graph = {}
+        fges_obj.trim_graph['nodes'] = [node for node in fges_obj.graph['nodes'] if node not in fges_obj.dropped_sensors]
+        fges_obj.trim_graph['dummy vars'] = [node for node in fges_obj.graph['dummy vars'] if node not in fges_obj.drop_dummy_sensors]
+        fges_obj.trim_graph['edges'] = [(source,dest) for source, dest in fges_obj.graph['edges'] if source not in fges_obj.dropped_sensors and dest not in fges_obj.dropped_sensors]
+        fges_obj.trim_graph['forbidden'] = [(source,dest) for source, dest in fges_obj.graph['forbidden'] if source not in fges_obj.dropped_sensors and dest not in fges_obj.dropped_sensors]
+
+
+    def adj_dtype(fges_obj):
+
+        for itr_var in fges_obj.vars:
+
+            dtype = fges_obj.data[itr_var].dtype
             if dtype == np.int64 or dtype == np.int32:
 
-                graph_fci.data[itr_var] = graph_fci.data[itr_var].astype('float64')
+                fges_obj.data[itr_var] = fges_obj.data[itr_var].astype('float64')
 
 
-    def build_knowledge(graph_fci):
+    def build_knowledge(fges_obj):
 
-        for itr_edge in graph_fci.trim_graph['edges']:
+        fges_obj.kn = td.Knowledge()
+        for itr_edge in fges_obj.trim_graph['edges']:
 
-            graph_fci.kn.setRequired(graph_fci.var_mapping[itr_edge[0]], graph_fci.var_mapping[itr_edge[1]])
+            fges_obj.kn.setRequired(fges_obj.var_mapping[itr_edge[0]], fges_obj.var_mapping[itr_edge[1]])
 
-        for itr_edge in graph_fci.trim_graph['forbidden']:
+        for itr_edge in fges_obj.trim_graph['forbidden']:
 
-            graph_fci.kn.setForbidden(graph_fci.var_mapping[itr_edge[0]], graph_fci.var_mapping[itr_edge[1]])
+            fges_obj.kn.setForbidden(fges_obj.var_mapping[itr_edge[0]], fges_obj.var_mapping[itr_edge[1]])
 
-        # print(graph_fci.kn.getListOfForbiddenEdges())
-        # print(graph_fci.kn.getListOfRequiredEdges())
+        # print(fges_obj.kn.getListOfForbiddenEdges())
+        # print(fges_obj.kn.getListOfRequiredEdges())
 
 
-    def perform_fci(graph_fci):
+    def perform_fges(fges_obj):
 
-        graph_fci.data_tet = tr.pandas_data_to_tetrad(graph_fci.data)
-        score = ts.score.MvpScore(graph_fci.data_tet, graph_fci.MVP_params[0], graph_fci.MVP_params[1], graph_fci.MVP_params[2])
-        # score = ts.score.EbicScore(graph_fci.data_tet, True)
-        # score.setGamma(graph_fci.EBIC_gamma)
-        # score = ts.score.SemBicScore(graph_fci.data_tet, True)
-        # score.setPenaltyDiscount(graph_fci.SemBIC_pen)
+        fges_obj.data_tet = tr.pandas_data_to_tetrad(fges_obj.data)
+        score = ts.score.MvpScore(fges_obj.data_tet, fges_obj.MVP_params[0], fges_obj.MVP_params[1], fges_obj.MVP_params[2])
         self = ts.Fges(score)
-        self.setKnowledge(graph_fci.kn)
+        self.setKnowledge(fges_obj.kn)
         self.setSymmetricFirstStep(True)
-        # self.setFaithfulnessAssumed(True)
+        self.setFaithfulnessAssumed(False)
         # self.setVerbose(True)
         # self.setMeekVerbose(True)
-        graph_fci.cpdag = self.search()
+        fges_obj.cpdag = self.search()
+        mat = tr.graph_to_matrix(fges_obj.cpdag, nullEpt=0, circleEpt=1, arrowEpt=2, tailEpt=3)
         # print(f'final score: {self.getModelScore()}')
-        mat = tr.graph_to_matrix(graph_fci.cpdag, nullEpt=0, circleEpt=1, arrowEpt=2, tailEpt=3)
         # print(mat)
 
         vars = mat.columns
         edges = []
-        undirected_edges = []
+        indirect_edges = []
         for itr in range(len(vars)):
 
             for itr_next in range(itr+1, len(vars)):
@@ -139,7 +137,7 @@ class run_fci_class:
                 if mat.loc[itr, vars[itr_next]] == 3 and mat.loc[itr_next, vars[itr]] == 3:
 
                     edges.extend([(vars[itr], vars[itr_next]), (vars[itr_next], vars[itr])])
-                    undirected_edges.append((vars[itr], vars[itr_next]))
+                    indirect_edges.extend([(vars[itr], vars[itr_next]) , (vars[itr_next], vars[itr])])
 
                 elif mat.loc[itr, vars[itr_next]] == 2 and mat.loc[itr_next, vars[itr]] == 3:
 
@@ -157,109 +155,105 @@ class run_fci_class:
 
                     raise Exception('POSSIBLE TO HAVE 1 IN MATRIX')
 
-
-        sensor_edges = [(graph_fci.rev_var_mapping[edge[0]], graph_fci.rev_var_mapping[edge[1]]) for edge in edges]
-        undirect_sensor_edges = [(graph_fci.rev_var_mapping[edge[0]], graph_fci.rev_var_mapping[edge[1]]) for edge in undirected_edges]
-        graph_fci.fci_edges_tup = sensor_edges
-        graph_fci.undirect_edges = undirect_sensor_edges
-        graph_fci.direct_edges = [edge for edge in graph_fci.fci_edges_tup if edge not in undirect_sensor_edges and (edge[1], edge[0]) not in undirect_sensor_edges]
-        # self.clear_knowledge()
+        # Classify into direct and indirect - indirected_edges contains bidirectionals 
+        fges_obj.fges_edges = [(fges_obj.rev_var_mapping[edge[0]], fges_obj.rev_var_mapping[edge[1]]) for edge in edges]
+        fges_obj.indirect_edges = [(fges_obj.rev_var_mapping[edge[0]], fges_obj.rev_var_mapping[edge[1]]) for edge in indirect_edges]
+        fges_obj.direct_edges = [edge for edge in fges_obj.fges_edges if edge not in fges_obj.indirect_edges and (edge[1], edge[0]) not in fges_obj.indirect_edges]
 
 
-    def categorise_edges(graph_fci):
+    def categorise_edges(fges_obj):
 
         edges_cat = {'knowledge': [], 
                      'data' : []}
         
-        for itr_edge in graph_fci.fci_edges_tup:
+        for itr_edge in fges_obj.direct_edges:
 
-            if itr_edge in graph_fci.trim_graph['edges']:
+            if itr_edge in fges_obj.trim_graph['edges']:
 
                 edges_cat['knowledge'].append(itr_edge)
-                
-            elif itr_edge not in graph_fci.trim_graph['edges'] and itr_edge not in graph_fci.undirect_edges:
+            
+            else:
 
                 edges_cat['data'].append(itr_edge)
 
-        graph_fci.edges_cat = edges_cat
+        fges_obj.edges_cat = edges_cat
 
 
-    def calc_knowledge_retention(graph_fci):
-
-        if len(graph_fci.trim_graph['edges']) > 1:
-
-            count = 0
-            for itr_edge in graph_fci.trim_graph['edges']:
-
-                if itr_edge in graph_fci.fci_edges_tup:
-
-                    count += 1
-            
-            print(f'Retention: {100*count/len(graph_fci.trim_graph["edges"])}')
-
-        else:
-            print('Retention: N/A')
-
-
-    def calc_avg_deg(graph_fci):
+    def calc_avg_deg(fges_obj):
 
         max_degree = 0
-        for itr_node in range(len(graph_fci.trim_graph['nodes'])):
+        # How many non dropped, non dummy nodes present
+        non_dummy_node_cnt = len(fges_obj.trim_graph['nodes']) - len(fges_obj.trim_graph['dummy vars'])
+        for itr_node in range(non_dummy_node_cnt):
 
             max_degree+=itr_node
 
-        act_degree = len(graph_fci.undirect_edges) + len(graph_fci.direct_edges)
+        act_degree = (len(fges_obj.indirect_edges) / 2) + len(fges_obj.direct_edges)
         print(f'Pc of max degree: {100*act_degree/max_degree}')
 
 
+    def generate_dags(fges_obj):
+
+        # dag_list = gt.generateCpdagDags(fges_obj.cpdag, True)
+        pdag_obj = PDAG(nodes=fges_obj.trim_graph['nodes'], edges=fges_obj.indirect_edges, arcs=fges_obj.direct_edges)
+        fges_obj.dags = pdag_obj.all_dags()
+        fges_obj.dags = [list(dag) for dag in fges_obj.dags]
 
 
-    def generate_dags(graph_fci):
-
-        # dag_list = gt.generateCpdagDags(graph_fci.cpdag, True)
-        pdag_obj = PDAG(nodes=graph_fci.trim_graph['nodes'], edges=graph_fci.undirect_edges, arcs=graph_fci.direct_edges)
-        graph_fci.dags = pdag_obj.all_dags()
-        graph_fci.dags = [list(dag) for dag in graph_fci.dags]
-
-
-    def find_best_dag(graph_fci):
+    def find_best_dag(fges_obj):
 
         mvp_scores = []
-        for itr_dag_edges in graph_fci.dags:
+        for itr_dag_edges in fges_obj.dags:
         
-            dag_score = graph_fci.score_dag(itr_dag_edges)
+            dag_score = fges_obj.score_dag(itr_dag_edges)
             mvp_scores.append(dag_score)
 
             # vis_graph = nx.DiGraph()
             # plt.figure(figsize=[5, 5])
-            # vis_graph.add_nodes_from(graph_fci.trim_graph['nodes'])
+            # vis_graph.add_nodes_from(fges_obj.graph['nodes'])
             # vis_graph.add_edges_from(itr_dag_edges)
             # pos = nx.spring_layout(vis_graph)
-            # nx.draw_networkx_edges(vis_graph, pos, edgelist=graph_fci.trim_graph['edges'], edge_color='black', width=2)
-            # nx.draw_networkx_edges(vis_graph, pos, edgelist=[edge for edge in graph_fci.direct_edges if edge not in graph_fci.trim_graph['edges']], edge_color='blue', width=2)
-            # nx.draw_networkx_edges(vis_graph, pos, edgelist=[edge for edge in itr_dag_edges if edge not in graph_fci.direct_edges], edge_color='red', width=2)
-            # nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=graph_fci.dropped_sensors)
-            # nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=graph_fci.trim_graph['nodes'])
+            # nx.draw_networkx_edges(vis_graph, pos, edgelist=edges_cat['data'], edge_color='red', width=2)
+            # nx.draw_networkx_edges(vis_graph, pos, edgelist=edges_cat['knowledge'], edge_color='black', width=2)
+            # nx.draw_networkx_edges(vis_graph, pos, edgelist=[edge for edge in itr_dag_edges if edge in fges_obj.indirect_edges], edge_color='blue', width=2)
+            # nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=fges_obj.dropped_sensors)
+            # nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=fges_obj.trim_graph['nodes'])
             # nx.draw_networkx_labels(vis_graph, pos, font_color='green')
             # plt.show()
 
-        graph_fci.best_score = max(mvp_scores)
-        graph_fci.best_dag = graph_fci.dags[mvp_scores.index(graph_fci.best_score)]
+        fges_obj.best_score = max(mvp_scores)
+        fges_obj.best_dag = fges_obj.dags[mvp_scores.index(fges_obj.best_score)]
 
 
-    def score_dag(graph_fci, edges):
+    def score_whole_dag(fges_obj):
 
-        score = ts.score.MvpScore(graph_fci.data_tet, graph_fci.MVP_params[0], graph_fci.MVP_params[1], graph_fci.MVP_params[2])
-        # score = ts.score.SemBicScore(graph_fci.data_tet, True)
-        # score.setPenaltyDiscount(graph_fci.SemBIC_pen)
-        # score = ts.score.EbicScore(graph_fci.data_tet, True)
-        # score.setGamma(graph_fci.EBIC_gamma)
+        score = ts.score.MvpScore(tr.pandas_data_to_tetrad(fges_obj.data_orig), fges_obj.MVP_params[0], fges_obj.MVP_params[1], fges_obj.MVP_params[2])
         test = ts.Fges(score)
         dag_obj = tg.Dag()
         node_obj_map = {}
-        for itr_node in graph_fci.trim_graph['nodes']:
+        for itr_node in fges_obj.graph['nodes']:
 
-            string = lang.String(graph_fci.var_mapping[itr_node])
+            string = lang.String(fges_obj.var_mapping[itr_node])
+            node = tg.GraphNode(string)
+            dag_obj.addNode(node)
+            node_obj_map[itr_node] = node
+        
+        for itr_edge in fges_obj.graph['edges']:
+
+            dag_obj.addDirectedEdge(node_obj_map[itr_edge[0]], node_obj_map[itr_edge[1]])
+
+        return test.scoreDag(dag_obj)
+
+
+    def score_dag(fges_obj, edges):
+
+        score = ts.score.MvpScore(fges_obj.data_tet, fges_obj.MVP_params[0], fges_obj.MVP_params[1], fges_obj.MVP_params[2])
+        test = ts.Fges(score)
+        dag_obj = tg.Dag()
+        node_obj_map = {}
+        for itr_node in fges_obj.trim_graph['nodes']:
+
+            string = lang.String(fges_obj.var_mapping[itr_node])
             node = tg.GraphNode(string)
             dag_obj.addNode(node)
             node_obj_map[itr_node] = node
@@ -269,20 +263,7 @@ class run_fci_class:
             dag_obj.addDirectedEdge(node_obj_map[itr_edge[0]], node_obj_map[itr_edge[1]])
 
         return test.scoreDag(dag_obj)
-        # return ts.score.scoreDag(dag_obj, graph_fci.data_tet, graph_fci.SemBIC_pen, True)
 
-
-
-    def only_direct_dag(graph_fci):
-
-        direct_dag = graph_fci.direct_edges
-        graph_fci.dag_score = graph_fci.score_dag(direct_dag)
-
-        # if graph_fci.dag_score > graph_fci.best_score:
-
-        #     graph_fci.best_score = graph_fci.dag_score
-        #     graph_fci.best_dag = direct_dag
-        #     # print(graph_fci.dag_score)
 
 
 

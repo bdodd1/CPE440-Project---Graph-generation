@@ -8,10 +8,10 @@ from tools import tools
 
 class handle_cycles:
 
-    def __init__(graph, graph, data, var_mapping):
+    def __init__(graph, graph_struct, data, var_mapping):
 
-        graph.nodes = graph['nodes']
-        graph.edges = graph['edges']
+        graph.nodes = graph_struct['nodes']
+        graph.edges = graph_struct['edges']
         graph.data = data
         graph.var_mapping = var_mapping
 
@@ -22,7 +22,7 @@ class handle_cycles:
         graph.find_bidirectionals()
         graph.handle_bidirectionals()
         graph.build_reach_mat()
-        # graph.split_cycles()
+        graph.split_cycles()
         # graph.calc_transfer_entropy()
 
     
@@ -70,42 +70,45 @@ class handle_cycles:
 
             for itr_cycle_node_next in cycle_nodes:
             
-                if adj_mat.loc[itr_cycle_node, itr_cycle_node_next] == 1 and adj_mat.loc[itr_cycle_node_next, itr_cycle_node] == 1 and [itr_cycle_node_next, itr_cycle_node] not in bidirectional_edges:
+                if adj_mat.loc[itr_cycle_node, itr_cycle_node_next] == 1 and adj_mat.loc[itr_cycle_node_next, itr_cycle_node] == 1 and (itr_cycle_node_next, itr_cycle_node) not in bidirectional_edges:
 
                     bidirectional_edges.append((itr_cycle_node, itr_cycle_node_next))
 
         
         graph.bidirectional_edges = bidirectional_edges
+        print(bidirectional_edges)
         # graph.bidirectional_nodes = list(set([]))
 
 
-    # def handle_bidirectionals(graph):
+    def handle_bidirectionals(graph):
 
-    #     for itr_bi_nodes in graph.bidirectionals:
+        for itr_biedge in graph.bidirectional_edges:
 
-            
+            arb_node = itr_biedge[0]   
+            dummy_var = arb_node+'_DUMMY'
+            col_name = graph.var_mapping[arb_node]   
+            dummy_col = col_name+'_DUMMY'
 
-    #     dummy_vars = []
-    #     for itr_bi_nodes in graph.bidirectionals:
-            
-    #         dummy_node = itr_bi_nodes[0]
-    #         if dummy_node not in dummy_vars:
-
-    #             dummy_vars.append(dummy_node)
-
-    #         else: 
-
-        
-
-
-
+            graph.nodes.append(dummy_var)
+            graph.edges.append((itr_biedge[1], dummy_var))
+            graph.edges.remove((itr_biedge[1], arb_node))
+            graph.data[dummy_col] = graph.data[col_name]
+            graph.var_mapping[dummy_var] = dummy_col
 
 
 
     def split_cycles(graph):
 
-        cycle_nodes = graph.cycle_nodes
+        reach_mat = graph.reach_mat
         adj_mat = graph.adj_mat
+        nodes = adj_mat.columns
+
+        cycle_nodes = []
+        for itr, itr_node in enumerate(nodes):
+
+            if reach_mat.iloc[itr,itr] == 1:
+
+                cycle_nodes.append(itr_node)
 
         cycles = {}
         key_count = 1
@@ -140,7 +143,7 @@ class handle_cycles:
             key_count += 1
 
         graph.cycles = cycles
-        # print(cycles)
+        print(cycles)
 
 
     def calc_transfer_entropy(graph):
@@ -157,21 +160,3 @@ class handle_cycles:
 
                 print(transfer_entropy[-1])
 
-
-
-
-
-
-
-
-##### This will not be in final release. Will hard code adj matrix to save time #####
-def build_latent_adj_mat(all_sensors, latent_struct):
-
-    latent_adj_mat = pd.DataFrame(columns=all_sensors, index = all_sensors)
-    latent_adj_mat.iloc[:,:] = 0
-
-    for itr_edge in latent_struct:
-        
-        latent_adj_mat.loc[itr_edge[0] ,itr_edge[1] ] = 1
-
-    return latent_adj_mat
