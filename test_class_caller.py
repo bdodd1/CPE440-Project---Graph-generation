@@ -130,6 +130,8 @@ data = pd.read_csv(rf'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Proj
 
 
 
+from analyse_graphs import analyse_graphs
+
 
 
 # from test_furn import test_furn_models
@@ -150,6 +152,11 @@ data = pd.read_csv(rf'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Proj
 # model = test_react1_models(data, var_mapping)
 # model.model_ctrl()
 
+from test_react1_sections import test_react1_models
+
+model = test_react1_models(data, var_mapping)
+model.model_ctrl()
+
 
 
 # from test_react2 import test_react2_models
@@ -157,14 +164,24 @@ data = pd.read_csv(rf'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Proj
 # model = test_react2_models(data, var_mapping)
 # model.model_ctrl()
 
+
+
+
 # from test_cab import test_cab_models
 
 # model = test_cab_models(data, var_mapping)
 # model.model_ctrl()
 
+# from test_cab_sections import test_cab_models
 
-from test_wgc import test_wgc_models
+# model = test_cab_models(data, var_mapping)
+# model.model_ctrl()
 
-model = test_wgc_models(data, var_mapping)
-model.model_ctrl()
+
+
+
+# from test_wgc import test_wgc_models
+
+# model = test_wgc_models(data, var_mapping)
+# model.model_ctrl()
 

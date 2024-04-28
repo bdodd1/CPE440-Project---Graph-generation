@@ -1,14 +1,3 @@
-
-from test_fci_furn import run_fges
-import networkx as nx
-import matplotlib.pyplot as plt 
-from tools import tools 
-from PyIF import te_compute as te
-import numpy as np
-import pandas as pd
-
-
-
 from test_fci_furn import run_fges
 import networkx as nx
 import matplotlib.pyplot as plt 

@@ -34,12 +34,10 @@ from tools import tools
 
 class run_fges:
 
-    def __init__(fges_obj, graph, data, var_mapping, struct):
+    def __init__(fges_obj, graph, data, struct):
 
         fges_obj.data_orig = data
         fges_obj.graph = graph
-        fges_obj.var_mapping = var_mapping
-        fges_obj.rev_var_mapping = {column: sensor for sensor, column in var_mapping.items()}
         fges_obj.struct = struct
         fges_obj.MVP_params = [1, 4, False]
 
@@ -77,14 +75,14 @@ class run_fges:
         fges_obj.vars = fges_obj.data.columns.tolist()
 
         # dropped_sensors is all sensors, and drop_dummy_sensors is just dummy sensors
-        fges_obj.dropped_sensors = [fges_obj.rev_var_mapping[column] for column in column_to_drop]
-        fges_obj.drop_dummy_sensors = [fges_obj.rev_var_mapping[column] for column in dummy_to_drop]
-
         fges_obj.trim_graph = {}
-        fges_obj.trim_graph['nodes'] = [node for node in fges_obj.graph['nodes'] if node not in fges_obj.dropped_sensors]
-        fges_obj.trim_graph['dummy vars'] = [node for node in fges_obj.graph['dummy vars'] if node not in fges_obj.drop_dummy_sensors]
-        fges_obj.trim_graph['edges'] = [(source,dest) for source, dest in fges_obj.graph['edges'] if source not in fges_obj.dropped_sensors and dest not in fges_obj.dropped_sensors]
-        fges_obj.trim_graph['forbidden'] = [(source,dest) for source, dest in fges_obj.graph['forbidden'] if source not in fges_obj.dropped_sensors and dest not in fges_obj.dropped_sensors]
+        fges_obj.trim_graph['nodes'] = [node for node in fges_obj.graph['nodes'] if node not in column_to_drop]
+        fges_obj.trim_graph['dummy vars'] = [node for node in fges_obj.graph['dummy vars'] if node not in dummy_to_drop]
+        fges_obj.trim_graph['edges'] = [(source,dest) for source, dest in fges_obj.graph['edges'] if source not in column_to_drop and dest not in column_to_drop]
+        fges_obj.trim_graph['forbidden'] = [(source,dest) for source, dest in fges_obj.graph['forbidden'] if source not in column_to_drop and dest not in column_to_drop]
+        fges_obj.trim_graph['dropped sensors'] = column_to_drop
+        fges_obj.trim_graph['dropped dumy var'] = dummy_to_drop
+        fges_obj.data_tet = tr.pandas_data_to_tetrad(fges_obj.data, True)
 
 
     def adj_dtype(fges_obj):
@@ -102,11 +100,11 @@ class run_fges:
         fges_obj.kn = td.Knowledge()
         for itr_edge in fges_obj.trim_graph['edges']:
 
-            fges_obj.kn.setRequired(fges_obj.var_mapping[itr_edge[0]], fges_obj.var_mapping[itr_edge[1]])
+            fges_obj.kn.setRequired(itr_edge[0], itr_edge[1])
 
         for itr_edge in fges_obj.trim_graph['forbidden']:
 
-            fges_obj.kn.setForbidden(fges_obj.var_mapping[itr_edge[0]], fges_obj.var_mapping[itr_edge[1]])
+            fges_obj.kn.setForbidden(itr_edge[0], itr_edge[1])
 
         # print(fges_obj.kn.getListOfForbiddenEdges())
         # print(fges_obj.kn.getListOfRequiredEdges())
@@ -114,7 +112,6 @@ class run_fges:
 
     def perform_fges(fges_obj):
 
-        fges_obj.data_tet = tr.pandas_data_to_tetrad(fges_obj.data, True)
         score = ts.score.MvpScore(fges_obj.data_tet, fges_obj.MVP_params[0], fges_obj.MVP_params[1], fges_obj.MVP_params[2])
         self = ts.Fges(score)
         self.setKnowledge(fges_obj.kn)
@@ -156,8 +153,8 @@ class run_fges:
                     raise Exception('POSSIBLE TO HAVE 1 IN MATRIX')
 
         # Classify into direct and indirect - indirected_edges contains bidirectionals 
-        fges_obj.fges_edges = [(fges_obj.rev_var_mapping[edge[0]], fges_obj.rev_var_mapping[edge[1]]) for edge in edges]
-        fges_obj.indirect_edges = [(fges_obj.rev_var_mapping[edge[0]], fges_obj.rev_var_mapping[edge[1]]) for edge in indirect_edges]
+        fges_obj.fges_edges = edges
+        fges_obj.indirect_edges = indirect_edges
         fges_obj.direct_edges = [edge for edge in fges_obj.fges_edges if edge not in fges_obj.indirect_edges and (edge[1], edge[0]) not in fges_obj.indirect_edges]
 
 
@@ -189,7 +186,8 @@ class run_fges:
             max_degree+=itr_node
 
         act_degree = (len(fges_obj.indirect_edges) / 2) + len(fges_obj.direct_edges)
-        print(f'Pc of max degree: {100*act_degree/max_degree}')
+        fges_obj.pc_degree = 100*act_degree/max_degree
+        # print(f'Pc of max degree: {fges_obj.pc_degree}')
 
 
     def generate_dags(fges_obj):
@@ -223,26 +221,8 @@ class run_fges:
 
         fges_obj.best_score = max(mvp_scores)
         fges_obj.best_dag = fges_obj.dags[mvp_scores.index(fges_obj.best_score)]
+        fges_obj.edges_cat['undirected'] = [edge for edge in fges_obj.best_dag if edge in fges_obj.indirect_edges]
 
-
-    def score_whole_dag(fges_obj):
-
-        score = ts.score.MvpScore(tr.pandas_data_to_tetrad(fges_obj.data_orig), fges_obj.MVP_params[0], fges_obj.MVP_params[1], fges_obj.MVP_params[2])
-        test = ts.Fges(score)
-        dag_obj = tg.Dag()
-        node_obj_map = {}
-        for itr_node in fges_obj.graph['nodes']:
-
-            string = lang.String(fges_obj.var_mapping[itr_node])
-            node = tg.GraphNode(string)
-            dag_obj.addNode(node)
-            node_obj_map[itr_node] = node
-        
-        for itr_edge in fges_obj.graph['edges']:
-
-            dag_obj.addDirectedEdge(node_obj_map[itr_edge[0]], node_obj_map[itr_edge[1]])
-
-        return test.scoreDag(dag_obj)
 
 
     def score_dag(fges_obj, edges):
@@ -253,7 +233,7 @@ class run_fges:
         node_obj_map = {}
         for itr_node in fges_obj.trim_graph['nodes']:
 
-            string = lang.String(fges_obj.var_mapping[itr_node])
+            string = lang.String(itr_node)
             node = tg.GraphNode(string)
             dag_obj.addNode(node)
             node_obj_map[itr_node] = node

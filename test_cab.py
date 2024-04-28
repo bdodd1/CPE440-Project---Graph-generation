@@ -1,14 +1,3 @@
-
-from test_fci_furn import run_fges
-import networkx as nx
-import matplotlib.pyplot as plt 
-from tools import tools 
-from PyIF import te_compute as te
-import numpy as np
-import pandas as pd
-
-
-
 from test_fci_furn import run_fges
 import networkx as nx
 import matplotlib.pyplot as plt 
@@ -38,7 +27,6 @@ class test_cab_models:
         # plt.show()
 
 
-        # Additional filters 
 
 
         num_models = 10
@@ -77,7 +65,7 @@ class test_cab_models:
 
 
             ### Plot best DAG of MEC ###
-            model.plot_best_dag_in_class(itr_model, fges_obj, False)
+            model.plot_best_dag_in_class(itr_model, fges_obj, True)
 
             ### Save best graph of MEC ###
             name = f'struct{str(itr_model)}_furn_test'
@@ -100,18 +88,18 @@ class test_cab_models:
         model.save_graphs(model.best_dags[unit_model_ind], name, location, False)
 
 
-
-    # My opinion - outlet P contols duty 
+    
     def struct_0(model):
 
-        model.edges = [('feed_air/comp_1.P_1', 'ACAB') , ('ACAB', 'comp_1/v_6.P_2') , ('comp_1/v_6.P_2', 'ACAB_DUMMY')]
+        model.edges = [('feed_air/comp_1.P_1', 'ACAB') , ('ACAB', 'comp_1/v_6.P_2') , ('comp_1/v_6.P_2', 'ACAB_sDUMMY')]
         model.edges.extend([('react_1.T_reg_DUMMY', 'Pos_6') , ('Pos_6', 'comp_1/v_6.F_7')])
         model.add_dummy('ACAB')
-        model.forbid_edges.extend([('comp_1/v_6.P_2', 'ACAB') , ('comp_1/v_6.F_7', 'ACAB')])
+        model.forbid_edges.extend([('comp_1/v_6.P_2', 'ACAB')])
         model.forbid_edges.extend([('ACAB_DUMMY', 'ACAB') , ('ACAB_DUMMY', 'feed_air/comp_1.P_1') , ('ACAB_DUMMY', 'comp_1/v_6.P_2') , 
                                    ('ACAB_DUMMY', 'Pos_6') , ('ACAB_DUMMY', 'react_1.T_reg_DUMMY') , ('ACAB_DUMMY', 'comp_1/v_6.F_7')])
         model.forbid_edges.extend([('ACAB', 'ACAB_DUMMY') , ('feed_air/comp_1.P_1', 'ACAB_DUMMY') , ('Pos_6', 'ACAB_DUMMY') , 
                                    ('react_1.T_reg_DUMMY', 'ACAB_DUMMY') , ('comp_1/v_6.F_7', 'ACAB_DUMMY')])
+                                   
 
 
     # Don't enforce outlet P control - see which way data thinks edge is 
@@ -193,10 +181,10 @@ class test_cab_models:
 
     def add_dummy(model, var):
 
-        dummy_name = var+'_DUMMY'
+        dummy_name = var+'_sDUMMY'
         model.nodes.append(dummy_name)
         col_name = model.var_mapping[var]
-        col_dummy_name = col_name + '_DUMMY'
+        col_dummy_name = col_name + '_sDUMMY'
         model.data[col_dummy_name] = model.data[col_name]
         model.var_mapping[dummy_name] = col_dummy_name
 
@@ -249,7 +237,7 @@ class test_cab_models:
         if activate:
 
             model.forbid_edges.extend([('ACAB', 'feed_air/comp_1.P_1') , ('comp_1/v_6.F_7', 'feed_air/comp_1.P_1') , 
-                                       ('comp_1/v_6.P_2', 'feed_air/comp_1.P_1') , ('Pos_6', 'ACAB') , ('Pos_6', 'feed_air/comp_1.P_1')])
+                                       ('comp_1/v_6.P_2', 'feed_air/comp_1.P_1') , ('Pos_6', 'feed_air/comp_1.P_1') , ('Pos_6', 'ACAB')])
 
             
 

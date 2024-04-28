@@ -110,6 +110,11 @@ class handle_cycles:
 
                 cycle_nodes.append(itr_node)
 
+        if cycle_nodes:
+
+            raise ValueError('DODDSY THERES CYCLES PAL')
+
+
         cycles = {}
         key_count = 1
         nodes_remaining = cycle_nodes
