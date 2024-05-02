@@ -5,6 +5,8 @@ from tools import tools
 import pandas as pd
 from itertools import combinations, product
 import re
+from handle_cycles import handle_cycles
+
 
 
 
@@ -29,7 +31,7 @@ class test_cab_models:
 
 
         ### INPUT ###
-        test_log = [5, 6]
+        test_log = [4, 6]
         valves = ['V6']
         
 
@@ -66,6 +68,17 @@ class test_cab_models:
             model.dummy_nodes_struct = list(set(model.dummy_nodes_struct))
             model.edges = list(set(model.edges))
 
+            graph = {'nodes' : model.nodes,
+                     'edges' : model.edges}
+            cycle_obj = handle_cycles(graph, model.required_data, model.var_mapping_orig)
+            cycle_obj.handle_cycles_ctrl()
+
+            # Skip if there any cycles as this will always lose
+            if cycle_obj.cycle_nodes:
+
+                continue
+
+
             # Score compiled sections / overall knowledge 
             total_kn_score = 0
             for test, mode in enumerate(itr_comb):
@@ -89,11 +102,14 @@ class test_cab_models:
             # Plot best DAG of MEC
             model.plot_best_dag_in_class(itr_comb, fges_obj, False)
 
+            graph = fges_obj.trim_graph
+            graph['edges'] = fges_obj.best_dag
+
             # Populate data store 
             model.comb_data_store[-1]['graph score'] = fges_obj.best_score
             model.comb_data_store[-1]['data score'] = model.comb_data_store[-1]['graph score'] - model.comb_data_store[-1]['knowledge score']
             model.comb_data_store[-1][r'% of max degree'] = fges_obj.pc_degree
-            model.comb_data_store[-1]['graph'] = fges_obj.trim_graph
+            model.comb_data_store[-1]['graph'] = graph
             model.comb_data_store[-1]['edges cat'] = fges_obj.edges_cat
 
             
@@ -120,35 +136,26 @@ class test_cab_models:
     # Test 0: Relationship between P1, W and P2. 
     def test0(model, test0_mode):
 
+
         if test0_mode == 0:
-
-            nodes = ['P1', 'ACAB', 'P2']
-            dummy_nodes_struct = ['ACAB_DUMMY']
-            edges = [('P1', 'ACAB') , ('ACAB', 'P2') , ('P2', 'ACAB_DUMMY')]
-            # Prevent ACAB DUMMY connecting with anything other than P2 -> ACAB_DUMMY
-            model.forbid_edges.extend([('ACAB_DUMMY', 'ACAB') , ('ACAB_DUMMY', 'P1') , ('ACAB_DUMMY', 'P2') , 
-                                   ('ACAB_DUMMY', 'V6') , ('ACAB_DUMMY', 'F7') , ('ACAB', 'ACAB_DUMMY') , 
-                                   ('P1', 'ACAB_DUMMY') , ('V6', 'ACAB_DUMMY') , ('F7', 'ACAB_DUMMY')])
-
-        elif test0_mode == 1:
 
             nodes = ['P1', 'ACAB', 'P2']
             dummy_nodes_struct = []
             edges = [('P1', 'ACAB') , ('ACAB', 'P2')]
 
-        elif test0_mode == 2:
+        elif test0_mode == 1:
 
             nodes = ['P1', 'ACAB', 'P2']
             dummy_nodes_struct = []
             edges = [('P1', 'ACAB') , ('P2', 'ACAB')]
 
-        elif test0_mode == 3:
+        elif test0_mode == 2:
 
             nodes = ['P1', 'ACAB', 'P2']
             dummy_nodes_struct = []
             edges = [('P1', 'ACAB')]
 
-        elif test0_mode == 4:
+        elif test0_mode == 3:
 
             nodes = ['P1', 'ACAB', 'P2']
             dummy_nodes_struct = []

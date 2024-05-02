@@ -6,12 +6,11 @@ import pandas as pd
 from itertools import combinations, product
 import re
 from handle_cycles import handle_cycles
-import numpy as np
 
 
 
 
-class test_react1_models:
+class test_distil_models:
 
     def __init__(model, data, var_mapping):
 
@@ -29,8 +28,8 @@ class test_react1_models:
 
 
         ### INPUT ###
-        test_log = [7, 3, 4, 2]
-        valves = ['V6', 'V7', 'V3', 'V2']
+        test_log = [4, 3, 4]
+        valves = ['V8', 'V10', 'V11']
         
 
 
@@ -72,11 +71,6 @@ class test_react1_models:
             cycle_obj = handle_cycles(graph, model.required_data, model.var_mapping_orig)
             cycle_obj.handle_cycles_ctrl()
 
-            # Skip if there any cycles as this will always lose
-            if cycle_obj.cycle_nodes:
-
-                continue
-
             # Score compiled sections / overall knowledge 
             total_kn_score = 0
             for test, mode in enumerate(itr_comb):
@@ -115,51 +109,30 @@ class test_react1_models:
         pass
 
 
-
-
-
-    # Test 0: Relationship between in and unit (V6, P1 and P2 defaulted to best arrangmenet from ACAB)
+    # Test 0: Relationship between temperature sensors
     def test0(model, test0_mode):
 
         if test0_mode == 0:
 
-            nodes = ['P2', 'F7', 'V6', 'F_sc', 'L_sp', 'T_reg', 'P6', 'V3']
+            nodes = ['T_20', 'T_10', 'T_fra']
             dummy_nodes_struct = []
-            edges = [('V6', 'P2') , ('V6', 'F7') , ('F7', 'P2') , ('F7', 'T_reg') , ('V3', 'F_sc') , ('F_sc', 'L_sp') , ('F_sc', 'T_reg')]
+            edges = [('T_20', 'T_10') , ('T_10', 'T_fra')]
 
         elif test0_mode == 1:
 
-            nodes = ['P2', 'F7', 'V6', 'F_sc', 'L_sp', 'T_reg', 'P6', 'V3']
+            nodes = ['T_20', 'T_10', 'T_fra']
             dummy_nodes_struct = []
-            edges = [('V6', 'P2') , ('V6', 'F7') , ('F7', 'P2') , ('F7', 'T_reg') , ('V3', 'F_sc') , ('F_sc', 'T_reg')]
+            edges = [('T_fra', 'T_10') , ('T_10', 'T_20')]
 
         elif test0_mode == 2:
 
-            nodes = ['P2', 'F7', 'V6', 'F_sc', 'L_sp', 'T_reg', 'P6', 'V3']
+            nodes = ['T_20', 'T_10', 'T_fra']
             dummy_nodes_struct = []
-            edges = [('V6', 'P2') , ('V6', 'F7') , ('F7', 'P2') , ('F7', 'T_reg') , ('V3', 'F_sc')]
+            edges = [('T_20', 'T_10') , ('T_fra', 'T_10')]
 
         elif test0_mode == 3:
 
-            nodes = ['P2', 'F7', 'V6', 'F_sc', 'L_sp', 'T_reg', 'P6', 'V3']
-            dummy_nodes_struct = []
-            edges = [('V6', 'P2') , ('V6', 'F7') , ('F7', 'P2') , ('V3', 'F_sc') , ('F_sc', 'T_reg')]
-
-        elif test0_mode == 4:
-
-            nodes = ['P2', 'F7', 'V6', 'F_sc', 'L_sp', 'T_reg', 'P6', 'V3']
-            dummy_nodes_struct = []
-            edges = [('V6', 'P2') , ('V6', 'F7') , ('F7', 'P2') , ('V3', 'F_sc')]
-       
-        elif test0_mode == 5:
-
-            nodes = ['P2', 'F7', 'V6', 'F_sc', 'L_sp', 'T_reg', 'P6', 'V3']
-            dummy_nodes_struct = []
-            edges = [('V6', 'P2') , ('V6', 'F7') , ('F7', 'P2')]
-       
-        elif test0_mode == 6:
-
-            nodes = ['P2', 'F7', 'V6', 'F_sc', 'L_sp', 'T_reg', 'P6', 'V3']
+            nodes = ['T_20', 'T_10', 'T_fra', 'F_reflux', 'V8']
             dummy_nodes_struct = []
             edges = []
 
@@ -174,26 +147,26 @@ class test_react1_models:
             model.knowledge_scores['test0']['mode'+str(test0_mode)] = score
 
         model.add_fges_inputs(nodes, dummy_nodes_struct, edges)
-                     
 
-    # Test 1: Unit interactions
+
+    # Test 1: Relationship between reflux stream and top of column
     def test1(model, test1_mode):
 
         if test1_mode == 0:
 
-            nodes = ['T_reg', 'L_sp', 'P6']
+            nodes = ['T_fra', 'F_reflux', 'V8']
             dummy_nodes_struct = []
-            edges = [('T_reg', 'L_sp')]
+            edges = [('V8', 'F_reflux') , ('F_reflux', 'T_fra')]
 
         elif test1_mode == 1:
 
-            nodes = ['T_reg', 'L_sp', 'P6']
+            nodes = ['T_fra', 'F_reflux', 'V8']
             dummy_nodes_struct = []
-            edges = [('L_sp', 'T_reg')]
+            edges = [('V8', 'F_reflux')]
 
         elif test1_mode == 2:
 
-            nodes = ['T_reg', 'L_sp', 'P6']
+            nodes = ['T_fra', 'F_reflux', 'V8']
             dummy_nodes_struct = []
             edges = []
 
@@ -210,32 +183,32 @@ class test_react1_models:
         model.add_fges_inputs(nodes, dummy_nodes_struct, edges)
 
 
-    # Test 2: Unit and out flow interactions
+    # Test 2: Unit interactions with product streams 
     def test2(model, test2_mode):
 
         if test2_mode == 0:
 
-            nodes = ['T_reg', 'L_sp', 'P6','T_cyc', 'C_co', 'C_o2', 'F_rgc', 'V2']
+            nodes = ['T_20', 'T_10', 'T_fra', 'F_slurry', 'F_lco', 'V11', 'F_hn', 'V10']
             dummy_nodes_struct = []
-            edges = [('T_reg', 'C_co') , ('T_reg', 'C_o2') , ('T_reg', 'T_cyc') , ('V2', 'F_rgc') , ('F_rgc', 'L_sp')]
+            edges = [('T_20', 'F_slurry'), ('T_20', 'F_lco') , ('T_10', 'F_hn') , ('V11', 'F_lco') , ('V10', 'F_hn')]
 
         elif test2_mode == 1:
 
-            nodes = ['T_reg', 'L_sp', 'P6', 'T_cyc', 'C_co', 'C_o2', 'F_rgc', 'V2']
+            nodes = ['T_20', 'T_10', 'T_fra', 'F_slurry', 'F_lco', 'V11', 'F_hn', 'V10']
             dummy_nodes_struct = []
-            edges = [('T_reg', 'C_co') , ('T_reg', 'C_o2') , ('T_reg', 'T_cyc') , ('V2', 'F_rgc')]
+            edges = [('F_slurry', 'T_20'), ('F_lco', 'T_20') , ('F_hn', 'T_10') , ('V11', 'F_lco') , ('V10', 'F_hn')]
 
         elif test2_mode == 2:
 
-            nodes = ['T_reg', 'L_sp', 'P6', 'T_cyc', 'C_co', 'C_o2', 'F_rgc', 'V2']
+            nodes = ['T_20', 'T_10', 'T_fra', 'F_slurry', 'F_lco', 'V11', 'F_hn', 'V10']
             dummy_nodes_struct = []
-            edges = [('V2', 'F_rgc')]
+            edges = [('V11', 'F_lco') , ('V10', 'F_hn')]
 
         elif test2_mode == 3:
 
-            nodes = ['T_reg', 'L_sp', 'P6', 'T_cyc', 'C_co', 'C_o2', 'F_rgc', 'V2']
+            nodes = ['T_20', 'T_10', 'T_fra', 'F_slurry', 'F_lco', 'V11', 'F_hn', 'V10']
             dummy_nodes_struct = []
-            edges = []   
+            edges = []
 
         else:
 
@@ -249,33 +222,6 @@ class test_react1_models:
 
         model.add_fges_inputs(nodes, dummy_nodes_struct, edges)
 
-
-    # Test 3: Valve 7 
-    def test3(model, test3_mode):
-
-        if test3_mode == 0:
-
-            nodes = ['V7', 'T_cyc' , 'F_sg']
-            dummy_nodes_struct = []
-            edges = [('V7', 'F_sg') , ('V7', 'T_cyc')]
-
-        elif test3_mode == 1:
-
-            nodes = ['V7', 'T_cyc' , 'F_sg']
-            dummy_nodes_struct = []
-            edges = [('V7', 'F_sg') , ('F_sg', 'T_cyc')]  
-
-        else:
-
-            raise ValueError('Invalid test mode.')
-
-
-        if not model.knowledge_scores['test3']['mode'+str(test3_mode)]:
-            
-            score = model.score_knowledge(nodes, dummy_nodes_struct, edges)
-            model.knowledge_scores['test3']['mode'+str(test3_mode)] = score
-
-        model.add_fges_inputs(nodes, dummy_nodes_struct, edges)
 
 
     def reset_fges_inputs(model):
@@ -306,10 +252,6 @@ class test_react1_models:
         fges_obj.remove_no_variance()
         score = fges_obj.score_dag(fges_obj.trim_graph['edges'])
 
-        if np.isnan(score):
-
-            score = 0
-
         return score
 
 
@@ -332,12 +274,12 @@ class test_react1_models:
 
         if activate:
 
-            exclude_list = [('F_rgc', 'L_sp') , ('F_sg', 'P6')]
+            exclude_list = [('F_slurry', 'T_20') , ('F_lco', 'T_20') , ('F_hn', 'T_10')]
 
             node_tiers = {}
-            node_tiers['out'] = ['T_cyc', 'C_co', 'F_sg', 'C_o2', 'F_rgc', 'V7', 'V2']
-            node_tiers['unit'] = ['T_reg', 'L_sp', 'P6']
-            node_tiers['in'] = ['F7', 'F_sc', 'V6', 'V3', 'P2']
+            node_tiers['out'] = ['F_slurry', 'F_lco', 'F_hn', 'V11', 'V10']
+            node_tiers['unit'] = ['T_20', 'T_10', 'T_fra', 'P5']
+            node_tiers['in'] = ['F_reflux', 'V8']
             
             node_tiers_names = ['out', 'unit', 'in']
             for itr_tier in range(len(node_tiers_names)-1):
@@ -355,12 +297,11 @@ class test_react1_models:
 
         if activate:            
             
-            model.forbid_edges.extend([('F7', 'F_sc') , ('F_sc', 'F7') , ('P2', 'F_sc') , ('F_sc', 'P2') , ('V6', 'F_sc') , 
-                                       ('V3', 'F7') , ('V7', 'F_rgc') , ('V2', 'F_sg') , ('V2', 'T_cyc') , 
-                                       ('V2', 'C_co') , ('V2', 'C_o2') ,
-                                       ('T_cyc','F_rgc') , ('C_co','F_rgc') , 
-                                       ('C_o2', 'F_rgc') , ('F_sg', 'F_rgc') , ('F_rgc', 'T_cyc') , 
-                                       ('F_rgc', 'X_co') , ('F_rgc', 'C_o2') , ('F_rgc', 'F_sg')])
+            model.forbid_edges.extend([('F_hn', 'F_lco') , ('F_lco', 'F_hn') , 
+                                       ('F_hn', 'F_slurry') , ('F_slurry', 'F_hn') ,
+                                       ('F_lco', 'F_slurry') , ('F_slurry', 'F_lco') , 
+                                       ('V10' , 'F_lco') , ('V10' , 'F_slurry') , 
+                                       ('V11' , 'F_hn') , ('V11' , 'F_slurry')])
 
 
     def forbid_valves(model, activate, valves):

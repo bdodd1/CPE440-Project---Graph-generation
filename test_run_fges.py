@@ -7,7 +7,7 @@
 
 import sys
 import jpype.imports
-jpype.startJVM(classpath=[r"C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\py-tetrad\pytetrad\resources\tetrad-current.jar"])
+jpype.startJVM(classpath=[r"C:\Users\fcb19bd\Documents\CPE440-Project---Graph-generation-main\py-tetrad-main\pytetrad\resources\tetrad-current.jar"])
 import edu.cmu.tetrad.search as ts
 import edu.cmu.tetrad.data as td
 import edu.cmu.tetrad.graph.GraphTransforms as gt
@@ -17,7 +17,7 @@ import edu.cmu.tetrad.graph as tg
 import java.lang as lang
 
 
-sys.path.insert(1, r'C:\Users\byron\OneDrive\Documents\Year 4\CPE440\Final Project\Code Repositiory\py-tetrad\pytetrad\tools')
+sys.path.insert(1, r'C:\Users\fcb19bd\Documents\CPE440-Project---Graph-generation-main\py-tetrad-main\pytetrad\tools')
 import translate as tr
 
 from causaldag import PDAG
@@ -243,6 +243,15 @@ class run_fges:
             dag_obj.addDirectedEdge(node_obj_map[itr_edge[0]], node_obj_map[itr_edge[1]])
 
         return test.scoreDag(dag_obj)
+    
+    def local_score(fges_obj, child, parents):
+        
+        nodes = child+parents
+        local_data = fges_obj.data[nodes]
+        local_data = tr.pandas_data_to_tetrad(local_data, True)
+        score = ts.score.MvpScore(local_data, fges_obj.MVP_params[0], fges_obj.MVP_params[1], fges_obj.MVP_params[2])
+
+        return score.localScore(0, [itr for itr in range(1,len(nodes))])
 
 
 

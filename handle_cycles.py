@@ -1,8 +1,6 @@
 
-import pyinform
 import pandas as pd
 import numpy as np
-from PyIF import te_compute as te
 from tools import tools 
 
 
@@ -19,9 +17,9 @@ class handle_cycles:
     def handle_cycles_ctrl(graph):
 
         graph.build_reach_mat()
-        graph.find_bidirectionals()
-        graph.handle_bidirectionals()
-        graph.build_reach_mat()
+        # graph.find_bidirectionals()
+        # graph.handle_bidirectionals()
+        # graph.build_reach_mat()
         graph.split_cycles()
         # graph.calc_transfer_entropy()
 
@@ -101,7 +99,7 @@ class handle_cycles:
 
         reach_mat = graph.reach_mat
         adj_mat = graph.adj_mat
-        nodes = adj_mat.columns
+        nodes = graph.nodes
 
         cycle_nodes = []
         for itr, itr_node in enumerate(nodes):
@@ -110,58 +108,82 @@ class handle_cycles:
 
                 cycle_nodes.append(itr_node)
 
-        if cycle_nodes:
 
-            raise ValueError('DODDSY THERES CYCLES PAL')
+        cycle_edges = []
+        for itr_cyc_node in cycle_nodes:
+
+            for itr_next_node in cycle_nodes:
+
+                if adj_mat.loc[itr_cyc_node, itr_next_node] == 1:
+
+                    cycle_edges.append((itr_cyc_node, itr_next_node))
 
 
-        cycles = {}
-        key_count = 1
-        nodes_remaining = cycle_nodes
-        while nodes_remaining:
+        # print(cycle_edges)
+        graph.cycle_edges = cycle_edges
+        graph.cycle_nodes = cycle_nodes
 
-            initial_node = nodes_remaining[0]
-            nodes_remaining.remove(initial_node)
-            cycles = cycles | {key_count : {'nodes' : [initial_node],
-                                            'edges' : []}}
+        # if cycle_nodes:
 
-            curr_node = initial_node
-            loop_incomplete = True
-            while loop_incomplete:
+        #     raise ValueError('DODDSY THERES CYCLES PAL')
 
-                for itr_rem_node in nodes_remaining:
 
-                    if adj_mat.loc[curr_node, itr_rem_node] == 1:
+        # cycles = {}
+        # key_count = 1
+        # nodes_remaining = cycle_nodes
+        # while nodes_remaining:
+
+        #     initial_node = nodes_remaining[0]
+        #     nodes_remaining.remove(initial_node)
+        #     cycles = cycles | {key_count : {'nodes' : [initial_node],
+        #                                     'edges' : []}}
+
+        #     curr_node = initial_node
+        #     loop_incomplete = True
+        #     loop_count = 0
+        #     while loop_incomplete:
+
+        #         for itr_rem_node in nodes_remaining:
+
+        #             if adj_mat.loc[curr_node, itr_rem_node] == 1:
                         
-                        cycles[key_count]['nodes'].append(itr_rem_node)
-                        cycles[key_count]['edges'].append((curr_node, itr_rem_node))
-                        nodes_remaining.remove(itr_rem_node)
-                        curr_node = itr_rem_node
+        #                 cycles[key_count]['nodes'].append(itr_rem_node)
+        #                 cycles[key_count]['edges'].append((curr_node, itr_rem_node))
+        #                 nodes_remaining.remove(itr_rem_node)
+        #                 curr_node = itr_rem_node
 
-                        if adj_mat.loc[curr_node, initial_node] == 1:
+        #                 if adj_mat.loc[curr_node, initial_node] == 1:
 
-                            cycles[key_count]['edges'].append((curr_node, initial_node))
-                            loop_incomplete = False
+        #                     cycles[key_count]['edges'].append((curr_node, initial_node))
+        #                     loop_incomplete = False
 
-                        break
+        #                 break
 
-            key_count += 1
+        #         if loop_count > 10:
 
-        graph.cycles = cycles
-        print(cycles)
+        #             raise ValueError('Infinite loop.')
+
+        #     key_count += 1
+
+        #     if key_count > 5:
+
+        #         raise ValueError('Infinite loop.')
+
+        # graph.cycles = cycles
+        # print(cycles)
 
 
-    def calc_transfer_entropy(graph):
+    # def calc_transfer_entropy(graph):
 
-        for itr_cycle in graph.cycles.values():
+    #     for itr_cycle in graph.cycles.values():
 
-            test_edges = itr_cycle['edges']
-            transfer_entropy = []
-            for itr_test_edge in test_edges:
+    #         test_edges = itr_cycle['edges']
+    #         transfer_entropy = []
+    #         for itr_test_edge in test_edges:
 
-                source_node = graph.data[graph.var_mapping[itr_test_edge[0]]]
-                dest_node = graph.data[graph.var_mapping[itr_test_edge[1]]]
-                transfer_entropy.append(te.te_compute(source_node.to_numpy(), dest_node.to_numpy(), safetyCheck=False, k=4))
+    #             source_node = graph.data[graph.var_mapping[itr_test_edge[0]]]
+    #             dest_node = graph.data[graph.var_mapping[itr_test_edge[1]]]
+    #             transfer_entropy.append(te.te_compute(source_node.to_numpy(), dest_node.to_numpy(), safetyCheck=False, k=4))
 
-                print(transfer_entropy[-1])
+    #             print(transfer_entropy[-1])
 
