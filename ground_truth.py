@@ -14,6 +14,7 @@ class ground_truth:
         truth_graph.add_cl(add_cl_flag)
         truth_graph.plot_truth_graph(plot_gt_flag)
 
+
     def build_truth(truth_graph):
 
         nodes = ['F3', 'T1', 'P4', 'deltaP', 'P6', 'T3', 'T2', 'T_r', 'T_reg', 'L_sp', 'T_cyc', 'T_cyc-T_reg', 'C_co', 'C_o2', 'P5', 'V4', 'V6', 'V7', 'V3', 'V1', 'V2', 'F_rgc', 

@@ -213,6 +213,11 @@ class test_cab_models:
             dummy_nodes_struct = []
             edges = [('V6', 'F7')]
 
+        elif test1_mode == 6:
+
+            nodes = ['V6', 'ACAB', 'P2', 'F7']
+            dummy_nodes_struct = []
+            edges = []
         else:
 
             raise ValueError('Invalid test mode.')

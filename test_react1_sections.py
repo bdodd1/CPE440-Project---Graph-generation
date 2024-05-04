@@ -29,7 +29,7 @@ class test_react1_models:
 
 
         ### INPUT ###
-        test_log = [7, 3, 4, 2]
+        test_log = [7, 3, 4, 3]
         valves = ['V6', 'V7', 'V3', 'V2']
         
 
@@ -264,6 +264,12 @@ class test_react1_models:
             nodes = ['V7', 'T_cyc' , 'F_sg']
             dummy_nodes_struct = []
             edges = [('V7', 'F_sg') , ('F_sg', 'T_cyc')]  
+
+        elif test3_mode == 2:
+
+            nodes = ['V7', 'T_cyc' , 'F_sg']
+            dummy_nodes_struct = []
+            edges = []  
 
         else:
 

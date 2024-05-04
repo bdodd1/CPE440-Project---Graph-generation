@@ -4,6 +4,8 @@ from openpyxl import Workbook, load_workbook
 from itertools import product
 from handle_cycles import handle_cycles
 from test_run_fges import run_fges
+import numpy as np
+import ast
 
 
 class analyse_graphs:
@@ -44,6 +46,23 @@ class analyse_graphs:
 
 
     @staticmethod
+    def pc_kn_vs_graph_score(data_store):
+
+        pc_kn = []
+        graph_scores = []
+        for itr_comb in data_store:
+
+            graph_scores.append(itr_comb['graph score'])
+            pc_kn.append(itr_comb['pc knowledge'])
+
+        plt.figure()
+        plt.scatter(pc_kn, graph_scores)
+        plt.xlabel('pc of final edges knowledge')
+        plt.ylabel('graph scores')
+        plt.show()
+
+
+    @staticmethod
     def pc_max_degree_vs_graph_score(data_store):
 
         pc_max_degree = []
@@ -67,7 +86,7 @@ class analyse_graphs:
         test_modes_list = []
         for itr_comb in data_store:
 
-            test_modes_list.append(itr_comb['combination'][test])
+            test_modes_list.append(ast.literal_eval(itr_comb['combination'])[test])
 
         test_modes = list(set(test_modes_list))
         mode_data_store = []
@@ -77,7 +96,7 @@ class analyse_graphs:
 
         for itr_comb in data_store:
 
-            mode = itr_comb['combination'][test]
+            mode = ast.literal_eval(itr_comb['combination'])[test]
             mode_data_store[mode].append(itr_comb['graph score'])
 
         plt.figure()
@@ -96,7 +115,7 @@ class analyse_graphs:
         test_modes_list = []
         for itr_comb in data_store:
 
-            test_modes_list.append(itr_comb['combination'][test])
+            test_modes_list.append(ast.literal_eval(itr_comb['combination'])[test])
 
         test_modes = list(set(test_modes_list))
         mode_data_store = []
@@ -106,17 +125,27 @@ class analyse_graphs:
 
         for itr_comb in data_store:
 
-            mode = itr_comb['combination'][test]
+            mode = ast.literal_eval(itr_comb['combination'])[test]
             mode_data_store[mode].append(itr_comb['graph score'])
 
+        data = []
         plt.figure()
         for itr_mode, itr_mode_data in enumerate(mode_data_store):
 
+            data.append(sum(itr_mode_data)/len(itr_mode_data))
             plt.bar(itr_mode, sum(itr_mode_data)/len(itr_mode_data))
 
+        if all(x<0 for x in data):
+            plt.ylim(1.1*min(data), 0.9*max(data))
+        elif any(x<0 for x in data) and any(x>0 for x in data):
+            plt.ylim(1.1*min(data), 1.1*max(data))
+        elif all(x>0 for x in data):
+            plt.ylim(0.9*min(data), 1.1*max(data))
         plt.xlabel('mode')
         plt.ylabel('avg graph score')
         plt.show()
+
+        print(data)
     
 
     @staticmethod
@@ -261,13 +290,12 @@ class analyse_graphs:
         vis_graph = nx.DiGraph()
         plt.figure(figsize=[5, 5])
         # plt.title()
-        vis_graph.add_nodes_from(data_store['graph']['nodes']+data_store['graph']['dropped sensors'])
+        vis_graph.add_nodes_from(data_store['graph']['nodes'])
         vis_graph.add_edges_from(data_store['graph']['edges'])
         pos = nx.circular_layout(vis_graph)
         nx.draw_networkx_edges(vis_graph, pos, edgelist=data_store['edges cat']['data'], edge_color='red', width=2)
         nx.draw_networkx_edges(vis_graph, pos, edgelist=data_store['edges cat']['knowledge'], edge_color='black', width=2)
         nx.draw_networkx_edges(vis_graph, pos, edgelist=data_store['edges cat']['undirected'], edge_color='blue', width=2)
-        nx.draw_networkx_nodes(vis_graph, pos, node_color='blue', node_size=500, nodelist=data_store['graph']['dropped sensors'])
         nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=data_store['graph']['nodes'])
         nx.draw_networkx_labels(vis_graph, pos, font_color='green')
         plt.show()
@@ -389,7 +417,7 @@ class analyse_graphs:
                            'data score' : graph_score-kn_score,
                            'graph score' : graph_score,
                            'knowledge count' : len(knowledge),
-                           r'% max degree' : pc_max_deg,
+                           r'% of max degree' : pc_max_deg,
                            'graph' : {'nodes' : nodes,
                                       'edges' : data+knowledge+undi},
                             'edges cat' : {'data' : data,
@@ -670,7 +698,7 @@ class analyse_graphs:
         new_data = []
         for itr_data in best_graph_scores:
 
-            graph = {'nodes' : itr_data['nodes'] + ['deltaP', 'T_cyc-T_reg'],
+            graph = {'nodes' : itr_data['nodes'] + ['T_cyc-T_reg'],
                      'edges' : itr_data['edges'],
                     'dummy vars' : [], # there is one but irrelevant at this point
                     'forbidden' : forbid_edges}
@@ -689,13 +717,13 @@ class analyse_graphs:
     @ staticmethod
     def cluster_mode(best_graph_scores, data, forbid_edges):
 
-        cluster_edges = [('T_r', 'T_20') , ('P4', 'P5') , ('T_fra', 'F_ln') , ('P5', 'F_ln')]
+        cluster_edges = [('T_r', 'T_20') , ('T_fra', 'F_ln') , ('T_fra', 'F_lpg')]
 
         new_data = []
         for itr_data in best_graph_scores:
 
             
-            graph = {'nodes' : itr_data['nodes'] + ['deltaP', 'T_cyc-T_reg'],
+            graph = {'nodes' : itr_data['nodes'] + ['T_cyc-T_reg'],
                      'edges' : itr_data['edges'] + cluster_edges,
                     'dummy vars' : [], # there is one but irrelevant at this point
                     'forbidden' : forbid_edges}
@@ -707,6 +735,7 @@ class analyse_graphs:
         for itr in range(len(best_graph_scores)):
 
             best_graph_scores[itr]['cluster mode'] = new_data[itr]
+            best_graph_scores[itr]['edges'] += cluster_edges
 
         return best_graph_scores
 
@@ -727,7 +756,7 @@ class analyse_graphs:
             
             sheet = wb.create_sheet(title=str(itr_data['combination']))
                 
-            nodes = itr_data['nodes'] + ['deltaP', 'T_cyc-T_reg']
+            nodes = itr_data['nodes'] + ['T_cyc-T_reg']
             edges = itr_data['edges']
 
             for itr, itr_node in enumerate(nodes, start=1):
@@ -739,10 +768,10 @@ class analyse_graphs:
                 sheet.cell(row=itr, column=2, value=itr_edge[0])
                 sheet.cell(row=itr, column=3, value=itr_edge[1])
 
-            for itr, itr_edge in enumerate(itr_data[mode][0], start=1):
+            for itr, itr_add_edge in enumerate(itr_data[mode][0], start=1):
 
-                sheet.cell(row=itr, column=4, value=itr_edge[0])
-                sheet.cell(row=itr, column=5, value=itr_edge[1])
+                sheet.cell(row=itr, column=4, value=itr_add_edge[0])
+                sheet.cell(row=itr, column=5, value=itr_add_edge[1])
 
             sheet.cell(row=1, column=6, value='graph score')
             sheet.cell(row=1, column=7, value=itr_data[mode][1])
@@ -807,9 +836,14 @@ class analyse_graphs:
             for itr, itr_place in enumerate(itr_comb):
 
                 unit = units[itr]
-                unit_graph = top_three_score[unit][itr_place][0]['graph']
+                unit_graph_list = top_three_score[unit][itr_place]
+                kn_len = []
+                for itr_graph_list in unit_graph_list:
+
+                    kn_len.append(itr_graph_list['knowledge count'])
+                unit_graph = unit_graph_list[kn_len.index(max(kn_len))]['graph']
                 graph_data['nodes'].extend(unit_graph['nodes'])
-                graph_data['edges'].extend(top_three_score[unit][itr_place][0]['edges cat']['knowledge'])
+                graph_data['edges'].extend(unit_graph_list[kn_len.index(max(kn_len))]['edges cat']['knowledge'])
 
             # Add flash sensors
             graph_data['nodes'].extend(['V9', 'F_ln'])
@@ -819,70 +853,73 @@ class analyse_graphs:
             graph_data['edges'] = list(set(graph_data['edges'])) 
 
 
-            cyc_obj = handle_cycles(graph_data, 'hi', 'hi')
-            cyc_obj.handle_cycles_ctrl()
+            # cyc_obj = handle_cycles(graph_data, 'hi', 'hi')
+            # cyc_obj.handle_cycles_ctrl()
 
 
             # All loops go through F_rgc so direct all parents to a dummy
-            graph_data['nodes'].append('F_rgc_DUMMY')
-            for itr_cycle_edge in cyc_obj.cycle_edges:
+            # graph_data['nodes'].append('F_rgc_DUMMY')
+            # for itr_cycle_edge in cyc_obj.cycle_edges:
 
-                if itr_cycle_edge[1] == 'F_rgc':
+            #     if itr_cycle_edge[1] == 'F_rgc':
 
-                    graph_data['edges'].remove(itr_cycle_edge)
-                    graph_data['edges'].append((itr_cycle_edge[0], 'F_rgc_DUMMY'))
+            #         graph_data['edges'].remove(itr_cycle_edge)
+            #         graph_data['edges'].append((itr_cycle_edge[0], 'F_rgc_DUMMY'))
 
 
             
-            # # Sorting out the F7 <--> P2
-            # if ('P2', 'F7') in graph_data['edges'] and ('F7', 'P2') in graph_data['edges']:
+            # Sorting out the F7 <--> P2
+            if ('P2', 'F7') in graph_data['edges'] and ('F7', 'P2') in graph_data['edges']:
 
-            #     P2_parents = []
-            #     F7_parents = []
-            #     for itr_edge in graph_data['edges']:
+                P2_parents = []
+                F7_parents = []
+                for itr_edge in graph_data['edges']:
 
-            #         if itr_edge[1] == 'P2':
+                    if itr_edge[1] == 'P2':
 
-            #             P2_parents.append(itr_edge[0])
+                        P2_parents.append(itr_edge[0])
 
-            #         elif itr_edge[1] == 'F7':
+                    elif itr_edge[1] == 'F7':
 
-            #             F7_parents.append(itr_edge[0])
+                        F7_parents.append(itr_edge[0])
                         
 
-            #     trim_P2_parents = [parent for parent in P2_parents if parent != 'F7']
-            #     P2_child_graph = {'nodes' : ['P2']+P2_parents,
-            #                     'edges' : [(parent, 'P2') for parent in P2_parents],
-            #                     'dummy vars' : [],
-            #                     'forbidden' : []}
-            #     fges_obj = run_fges(P2_child_graph, data, 'score kn')
-            #     fges_obj.remove_no_variance()
-            #     P2_score_prior = fges_obj.local_score(['P2'] , P2_parents)
-            #     P2_score_after = fges_obj.local_score(['P2'] , trim_P2_parents)
-            #     P2_penalty = P2_score_prior - P2_score_after
+                trim_P2_parents = [parent for parent in P2_parents if parent != 'F7']
+                P2_child_graph = {'nodes' : ['P2']+P2_parents,
+                                'edges' : [(parent, 'P2') for parent in P2_parents],
+                                'dummy vars' : [],
+                                'forbidden' : []}
+                fges_obj = run_fges(P2_child_graph, data, 'score kn')
+                fges_obj.remove_no_variance()
+                P2_score_prior = fges_obj.local_score(['P2'] , P2_parents)
+                P2_score_after = fges_obj.local_score(['P2'] , trim_P2_parents)
+                P2_penalty = P2_score_prior - P2_score_after
 
-            #     trim_F7_parents = [parent for parent in F7_parents if parent != 'P2']
-            #     F7_child_graph = {'nodes' : ['F7']+F7_parents,
-            #                     'edges' : [(parent, 'F7') for parent in F7_parents],
-            #                     'dummy vars' : [],
-            #                     'forbidden' : []}
-            #     fges_obj = run_fges(F7_child_graph, data, 'score kn')
-            #     fges_obj.remove_no_variance()
-            #     F7_score_prior = fges_obj.local_score(['F7'] , F7_parents)
-            #     F7_score_after = fges_obj.local_score(['F7'] , trim_F7_parents)
-            #     F7_penalty = F7_score_prior - F7_score_after
+                trim_F7_parents = [parent for parent in F7_parents if parent != 'P2']
+                F7_child_graph = {'nodes' : ['F7']+F7_parents,
+                                'edges' : [(parent, 'F7') for parent in F7_parents],
+                                'dummy vars' : [],
+                                'forbidden' : []}
+                fges_obj = run_fges(F7_child_graph, data, 'score kn')
+                fges_obj.remove_no_variance()
+                F7_score_prior = fges_obj.local_score(['F7'] , F7_parents)
+                F7_score_after = fges_obj.local_score(['F7'] , trim_F7_parents)
+                F7_penalty = F7_score_prior - F7_score_after
 
-            #     if F7_penalty < P2_penalty:
+                if F7_penalty < P2_penalty:
 
-            #         graph_data['edges'].remove(('P2', 'F7'))
+                    graph_data['edges'].remove(('P2', 'F7'))
 
-            #     elif F7_penalty > P2_penalty:
+                elif F7_penalty > P2_penalty:
 
-            #         graph_data['edges'].remove(('F7', 'P2'))
+                    graph_data['edges'].remove(('F7', 'P2'))
 
-            #     else:
+                elif np.isnan(F7_penalty) or np.isnan(P2_penalty):
 
-            #         raise ValueError('GIVE UP NOW')
+                    graph_data['edges'].remove(('P2', 'F7'))
+                else:
+
+                    raise ValueError('GIVE UP NOW')
 
             cyc_obj = handle_cycles(graph_data, 'hi', 'hi')
             cyc_obj.handle_cycles_ctrl()
@@ -940,9 +977,9 @@ class analyse_graphs:
                 next_tiers = node_tiers_names[itr_tier+1:]
                 for itr_next_tier in next_tiers:
                     
-                    for itr_tier_node in node_tiers[curr_tier]:
+                    for itr_tier_node in unit[curr_tier]:
 
-                        forbid_edges.extend([(itr_tier_node, next_tier_node) for next_tier_node in node_tiers[itr_next_tier] if (itr_tier_node, next_tier_node) not in unit['exclude']])
+                        forbid_edges.extend([(itr_tier_node, next_tier_node) for next_tier_node in unit[itr_next_tier] if (itr_tier_node, next_tier_node) not in unit['exclude']])
 
         #cab
         forbid_edges.extend([('ACAB', 'P1') , ('F7', 'P1') , 
@@ -974,18 +1011,73 @@ class analyse_graphs:
         
 
     @staticmethod
-    def compare_cul_modes(modes):
+    def forbid_outlets(forbid_edges):
 
-        for mode_name, itr_mode in modes.items():
+        unit_sensors = {'cab' : ['P1', 'F7', 'P2', 'ACAB', 'V6'],
+                'reg' : ['F7', 'P2', 'V6', 'T_reg', 'L_sp', 'P6', 'F_sg', 'T_cyc', 'C_co', 'C_o2', 'V7', 'F_rgc', 'V2', 'F_sc', 'V3'],
+                'react' : ['F_sc', 'V3', 'F_rgc', 'V2', 'F3', 'T2', 'T_r', 'P4'],
+                'furn' : ['F3', 'T1', 'F5', 'V1', 'T3', 'T2'],
+                'distil' : ['T_20', 'T_10', 'T_fra', 'P5', 'F_slurry', 'F_lco', 'V11', 'F_hn', 'V10', 'F_reflux', 'V8'],
+                'wgc' : ['V4', 'AWGC', 'F_lpg'],
+                'flash' : ['V9', 'F_ln']}
 
-            combination = []
-            score = []
+
+        forbid_nodes = {'F_sg' : ['react', 'distil', 'flash', 'wgc'],
+                        'T_cyc' : ['react', 'distil', 'flash', 'wgc'],
+                        'C_co' : ['react', 'distil', 'flash', 'wgc'],
+                        'C_o2' : ['react', 'distil', 'flash', 'wgc'],
+                        'V7' : ['react', 'distil', 'flash', 'wgc'],
+                        'F_hn' : ['flash', 'wgc'],
+                        'V10' : ['flash', 'wgc'],
+                        'F_lco' : ['flash', 'wgc'],
+                        'V11' : ['flash', 'wgc'],
+                        'F_slurry' : ['flash', 'wgc'],
+                        'F_ln' : ['wgc'],
+                        'V9' : ['wgc']}
+        
+        for itr_node, itr_unit_list in forbid_nodes.items():
+
+            for itr_unit in itr_unit_list:
+            
+                forbid_edges.extend([(itr_node, node) for node in unit_sensors[itr_unit]])
+
+        return forbid_edges
+
+
+    @staticmethod
+    def compare_cul_modes(modes, all_graphs):
+
+        combs = []
+        scores = []
+        for itr in all_graphs:
+
+            combs.append(itr['combination'])
+            scores.append(itr['score'])
+
+        ordered = sorted(zip(combs, scores), key=lambda x: x[1], reverse=True)
+        combs = [sens[0] for sens in ordered]
+        scores = [sens[1] for sens in ordered]
+
+        data_store = {}
+        for itr in combs:
+
+            data_store[itr] = [None for _ in range(len(modes.keys()))]
+
+        for itr, itr_mode in enumerate(modes.values()):
+
             for itr_comb in itr_mode:
 
-                combination.append(itr_comb['combination'])
-                score.append(itr_comb['score'])
+                combination = itr_comb['combination']
+                data_store[combination][itr] = itr_comb['score']
 
-            plt.plot(combination, score, label=mode_name)
+        for itr, itr_mode in enumerate(modes.keys()):
+
+            score = []
+            for itr_data in data_store.values():
+
+                score.append(itr_data[itr])
+
+            plt.plot(combs, score, label=list(modes.keys())[itr])
 
         plt.xlabel('combination')
         plt.ylabel('score')
@@ -1008,7 +1100,7 @@ class analyse_graphs:
         for itr in unit_sensors.values():
             nodes += list(itr)
 
-        graph = {'nodes' : nodes + ['deltaP', 'T_cyc-T_reg'],
+        graph = {'nodes' : nodes + ['T_cyc-T_reg'],
                     'edges' : [],
                 'dummy vars' : [], # there is one but irrelevant at this point
                 'forbidden' : forbid_edges}
@@ -1043,42 +1135,189 @@ class analyse_graphs:
 
     def get_mode_gt_similarity_score(modes, ground_truth):
 
+        no_var = [('F7', 'P6') , ('P2', 'P6'), ('P6', 'C_co'), ('P6', 'C_o2'), ('F_sg', 'P6') , ('T_reg', 'P6') , ('F3', 'P4'), ('T_r', 'P4'),
+                        ('P5', 'F_reflux') , ('F_reflux', 'P5') , ('T_fra', 'P5') , ('P4', 'P5') , 
+                        ('P4', 'deltaP') , ('P6', 'deltaP') , ('deltaP', 'F_rgc') , ('deltaP', 'F_sc')]
+        bidirectional = [('P2', 'ACAB') , ('T_10', 'T_20') , ('T_fra', 'T_10') , ('F_reflux', 'T_fra')]
+        ground_truth_adapt = ground_truth.copy()
+        for itr_var in no_var:
+
+            ground_truth_adapt['edges'].remove(itr_var)
+        for itr_var in bidirectional:
+
+            ground_truth_adapt['edges'].remove(itr_var)
+
         new_modes = {}
         for itr_mode, itr_comb in modes.items():
 
             data_store = itr_comb
+            for itr, itr_graph in enumerate(itr_comb):
 
-            for itr in range(len(data_store)):
+                # Full gt
+                edge_match_count = 0
+                edge_mismatch_count = 0
+                edges = itr_graph['edges'] + itr_graph['cross unit']
+                for itr_edge in edges:
 
-                data_store[itr]['graph'] = {'nodes' : data_store['nodes'],
-                                            'edges' : data_store['edges'] + data_store['cross unit']}
+                    if itr_edge in ground_truth['edges']:
 
-            _, overall_metric, pc_match, pc_mismatch = analyse_graphs.find_top_three_closest_to_gt(data_store, ground_truth)
+                        edge_match_count += 1
 
-            for itr in range(len(data_store)):
+                    else:
 
-                del data_store[itr]['graph']
-                data_store[itr]['overall metric'] = overall_metric[itr]
-                data_store[itr]['pc match'] = pc_match[itr]
-                data_store[itr]['pc mismatch'] = pc_mismatch[itr]
+                        edge_mismatch_count += 1
+            
+
+                data_store[itr]['full gt'] = {}
+                data_store[itr]['full gt']['pc match'] = 100*edge_match_count/len(ground_truth['edges'])
+                data_store[itr]['full gt']['pc mismatch'] = 100*edge_mismatch_count/len(edges)
+                data_store[itr]['full gt']['overall metric'] = data_store[itr]['full gt']['pc match'] - data_store[itr]['full gt']['pc mismatch']
+
+
+
+                # Adapted gt
+                # Removing 0 var and bidirectional
+                edge_match_count = 0
+                edge_mismatch_count = 0
+                edges = itr_graph['edges'] + itr_graph['cross unit']
+                for itr_edge in edges:
+
+                    if itr_edge in ground_truth_adapt['edges'] or itr_edge in bidirectional:
+
+                        edge_match_count += 1
+
+                    else:
+
+                        edge_mismatch_count += 1
+
+                data_store[itr]['adapt gt'] = {}
+                data_store[itr]['adapt gt']['pc match'] = 100*edge_match_count/len(ground_truth_adapt['edges'])
+                data_store[itr]['adapt gt']['pc mismatch'] = 100*edge_mismatch_count/len(edges)
+                data_store[itr]['adapt gt']['overall metric'] = data_store[itr]['adapt gt']['pc match'] - data_store[itr]['adapt gt']['pc mismatch']
+
 
             new_modes[itr_mode] = data_store
+
+        return new_modes
 
 
 
 
     def plot_whole_graph(nodes, kn, data):
 
+        edges = kn+data
+        vis_graph = nx.DiGraph()
         plt.figure(figsize=[10, 10])
-        graph = nx.DiGraph()
-        graph.add_nodes_from(nodes)
-        graph.add_edges_from(kn+data)
-        pos = nx.circular_layout(graph)
-        nx.draw_networkx_edges(graph, pos, edgelist=kn, edge_color='black', width=2)
-        nx.draw_networkx_edges(graph, pos, edgelist=data, edge_color='red', width=2)
-        nx.draw_networkx_nodes(graph, pos, node_color='black')
-        nx.draw_networkx_labels(graph, pos, font_color='blue')
-        nx.draw(graph, pos=pos)
+        vis_graph.add_nodes_from(nodes)
+        vis_graph.add_edges_from(edges)
+        pos = nx.circular_layout(vis_graph)
+        nx.draw_networkx_edges(vis_graph, pos, edgelist=data, edge_color='red', width=2)
+        nx.draw_networkx_edges(vis_graph, pos, edgelist=kn, edge_color='black', width=2)
+        nx.draw_networkx_nodes(vis_graph, pos, node_color='black', node_size=500, nodelist=nodes)
+        nx.draw_networkx_labels(vis_graph, pos, font_color='lightblue')
         plt.show()
 
-            
+
+    @staticmethod
+    def compare_gt_similarity(modes, mode, all_graphs):
+
+
+        combs = []
+        scores = []
+        for itr in all_graphs:
+
+            combs.append(itr['combination'])
+            scores.append(itr['score'])
+
+        ordered = sorted(zip(combs, scores), key=lambda x: x[1], reverse=True)
+        combs = [sens[0] for sens in ordered]
+        scores = [sens[1] for sens in ordered]
+
+
+        data_store = {}
+        for itr in combs:
+
+            data_store[itr] = [None for _ in range(len(modes.keys()))]
+
+        for itr, itr_mode in enumerate(modes.values()):
+
+            for itr_comb in itr_mode:
+
+                combination = itr_comb['combination']
+                data_store[combination][itr] = itr_comb[mode]['pc match']
+
+        for itr, itr_mode in enumerate(modes.keys()):
+
+            score = []
+            for itr_data in data_store.values():
+
+                score.append(itr_data[itr])
+
+            plt.plot(combs, score, label=list(modes.keys())[itr])
+
+        plt.xlabel('combination')
+        plt.ylabel('pc match')
+        plt.legend()
+        plt.xticks(rotation='vertical')
+        plt.show()
+
+
+
+        data_store = {}
+        for itr in combs:
+
+            data_store[itr] = [None for _ in range(len(modes.keys()))]
+
+        for itr, itr_mode in enumerate(modes.values()):
+
+            for itr_comb in itr_mode:
+
+                combination = itr_comb['combination']
+                data_store[combination][itr] = itr_comb[mode]['pc mismatch']
+
+        for itr, itr_mode in enumerate(modes.keys()):
+
+            score = []
+            for itr_data in data_store.values():
+
+                score.append(itr_data[itr])
+
+            plt.plot(combs, score, label=list(modes.keys())[itr])
+
+        plt.xlabel('combination')
+        plt.ylabel('pc mismatch')
+        plt.legend()
+        plt.xticks(rotation='vertical')
+        plt.show()
+
+
+
+        data_store = {}
+        for itr in combs:
+
+            data_store[itr] = [None for _ in range(len(modes.keys()))]
+
+        for itr, itr_mode in enumerate(modes.values()):
+
+            for itr_comb in itr_mode:
+
+                combination = itr_comb['combination']
+                data_store[combination][itr] = itr_comb[mode]['overall metric']
+
+        for itr, itr_mode in enumerate(modes.keys()):
+
+            score = []
+            for itr_data in data_store.values():
+
+                score.append(itr_data[itr])
+
+            plt.plot(combs, score, label=list(modes.keys())[itr])
+
+        plt.xlabel('combination')
+        plt.ylabel('overall metric')
+        plt.legend()
+        plt.xticks(rotation='vertical')
+        plt.show()
+
+
+        
