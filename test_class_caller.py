@@ -198,28 +198,18 @@ data = pd.read_csv(rf'C:\Users\fcb19bd\Documents\CPE440-Project---Graph-generati
 
 
 
-from test_run_fges import run_fges
-
-data = data[['P2', 'F7', 'ACAB']]
-graph = {'nodes' : ['P2', 'F7', 'ACAB'],
-         'edges' : [('P2', 'F7'), ('F7', 'ACAB')],
-         'forbidden' : [],
-         'dummy vars' : []}
-fges_obj = run_fges(graph, data, 'score kn')
-fges_obj.remove_no_variance()
-score = fges_obj.score_dag(fges_obj.trim_graph['edges'])
-
-
-
-
-from analyse_graphs import analyse_graphs
-
 
 
 # from test_furn import test_furn_models
 
 # model = test_furn_models(data, var_mapping)
 # model.model_ctrl()
+
+# from test_furn_sections import test_furn_models
+
+# model = test_furn_models(data, var_mapping)
+# model.model_ctrl()
+
 
 
 
@@ -269,10 +259,10 @@ from analyse_graphs import analyse_graphs
 # model = test_cab_models(data, var_mapping)
 # model.model_ctrl()
 
-from test_cab_sections import test_cab_models
+# from test_cab_sections import test_cab_models
 
-model = test_cab_models(data, var_mapping)
-model.model_ctrl()
+# model = test_cab_models(data, var_mapping)
+# model.model_ctrl()
 
 
 
@@ -282,3 +272,7 @@ model.model_ctrl()
 # model = test_wgc_models(data, var_mapping)
 # model.model_ctrl()
 
+from test_wgc_sections import test_wgc_models
+
+model = test_wgc_models(data, var_mapping)
+model.model_ctrl()

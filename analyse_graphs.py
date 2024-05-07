@@ -6,6 +6,7 @@ from handle_cycles import handle_cycles
 from test_run_fges import run_fges
 import numpy as np
 import ast
+from scipy import stats 
 
 
 class analyse_graphs:
@@ -145,7 +146,7 @@ class analyse_graphs:
         plt.ylabel('avg graph score')
         plt.show()
 
-        print(data)
+        print(100*(max(data)-min(data))/(0.5*max(data)+min(data)))
     
 
     @staticmethod
@@ -1321,3 +1322,241 @@ class analyse_graphs:
 
 
         
+    @staticmethod
+    def score_vs_forbid_edges(data_store):
+
+        node_count = []
+        for itr_data in data_store.values():
+
+            node_count.append(len(itr_data[0]['graph']['nodes']))
+
+        forbid_edges = [10, 67, 19, 115, 36, 3]
+        max_edges = [node*(node-1) for node in node_count]
+
+        pc_forbid_edges = [100*forbid/maximum for forbid,maximum in zip(forbid_edges,max_edges)]
+        ordered = sorted(zip(pc_forbid_edges, list(data_store.keys())), key=lambda x: x[0], reverse=False)
+        ordered_scores = [itr[0] for itr in ordered]
+        ordered_units = [itr[1] for itr in ordered]
+
+        # score = {}
+        # for itr, itr_unit in enumerate(ordered_units):
+            
+        #     data = data_store[itr_unit]
+        #     score[ordered_scores[itr]] = []
+        #     for itr_graph in data:
+
+        #         score[ordered_scores[itr]].append(itr_graph['graph score'])
+
+        # plt.boxplot(score.values())
+
+
+        avgs = []
+        for itr_unit in ordered_units:
+            
+            data = data_store[itr_unit]
+            score = []
+            for itr_graph in data:
+
+                score.append(itr_graph['graph score'])
+            avgs.append(sum(score)/len(score))
+
+        plt.figure()
+        plt.plot(ordered_scores, avgs)
+        # plt.xticks(range(1, len(ordered_scores)+1) , ordered_scores)
+        plt.xlabel('pc of max edges forbidden')
+        plt.ylabel('score')
+        plt.show()
+
+        plt.figure()
+        plt.plot(ordered_units, avgs)
+        # plt.xticks(range(1, len(ordered_scores)+1) , ordered_scores)
+        plt.xlabel('pc of max edges forbidden')
+        plt.ylabel('score')
+        plt.show()
+
+
+    @staticmethod 
+    def avg_score_scatt_vs_pc_graph_kn(data_store):
+
+        graph_data = {}
+        for itr_unit, itr_data in data_store.items():
+
+            scores = []
+            pc_kn = []
+            for itr_graph in itr_data:
+
+                scores.append(itr_graph['graph score'])
+                pc_kn.append(itr_graph['pc knowledge'])
+
+            percentiles = [stats.percentileofscore(scores, x) for x in scores]
+            graph_data[itr_unit] = [percentiles, pc_kn]
+
+        pc_kn = []
+        percentiles = []
+        for itr_data in graph_data.values():
+
+            percentiles.extend(itr_data[0])
+            pc_kn.extend(itr_data[1])
+
+        plt.figure()
+        plt.scatter(pc_kn, percentiles)
+        plt.xlabel('pc graph kn')
+        plt.ylabel('percentile of score in unit data')
+        plt.show()
+
+
+    @staticmethod
+    def gt_similarity_score_graph(data_store, ground_truth):
+
+        no_var = {}
+        no_var['cab'] = [] 
+        no_var['react1'] = [('F7', 'P6'), ('P2', 'P6'), ('P6', 'C_co'), ('P6', 'C_o2'), ('F_sg', 'P6') , ('T_reg', 'P6')] 
+        no_var['react2'] = [('F3', 'P4'), ('T_r', 'P4')]
+        no_var['distil'] = [('P5', 'F_reflux') , ('F_reflux', 'P5') , ('T_fra', 'P5')]
+        no_var['furn'] = []
+        no_var['wgc'] = []
+
+        bidirectional = {}
+        bidirectional['cab'] = [('P2', 'ACAB')]
+        bidirectional['react1'] = []
+        bidirectional['react2'] = []
+        bidirectional['distil'] = [('T_10', 'T_20') , ('T_fra', 'T_10') , ('F_reflux', 'T_fra')]
+        bidirectional['furn'] = []
+        bidirectional['wgc'] = []
+
+        add_nodes = {}
+        add_nodes['cab'] = []
+        add_nodes['react1'] = ['P6']
+        add_nodes['react2'] = ['P4']
+        add_nodes['distil'] = ['P5']
+        add_nodes['furn'] = []
+        add_nodes['wgc'] = []
+        
+        for itr_unit, itr_data in data_store.items():
+
+            # Get full gt for unit
+            nodes = itr_data[0]['graph']['nodes'] + add_nodes[itr_unit]
+            gt_edges = []
+            for itr_gt_edge in ground_truth['edges']:
+
+                if itr_gt_edge[0] in nodes and itr_gt_edge[1] in nodes:
+
+                    gt_edges.append(itr_gt_edge)
+
+            # Get adapt gt for unit
+            gt_edges_adapt = gt_edges
+            for itr_var in no_var[itr_unit]:
+
+                gt_edges_adapt.remove(itr_var)
+            for itr_var in bidirectional[itr_unit]:
+
+                gt_edges_adapt.remove(itr_var)
+
+            unit_data = itr_data
+            for itr in range(len(itr_data)):
+
+                # Full gt
+                edge_match_count = 0
+                edge_mismatch_count = 0
+                edges = itr_data[itr]['graph']['edges']
+                for itr_edge in edges:
+
+                    if itr_edge in gt_edges:
+
+                        edge_match_count += 1
+                    else:
+                        edge_mismatch_count += 1
+            
+
+                unit_data[itr]['full gt'] = {}
+                unit_data[itr]['full gt']['pc match'] = 100*edge_match_count/len(gt_edges)
+                unit_data[itr]['full gt']['pc mismatch'] = 100*edge_mismatch_count/len(edges)
+                unit_data[itr]['full gt']['overall metric'] = unit_data[itr]['full gt']['pc match'] - unit_data[itr]['full gt']['pc mismatch']
+
+
+                # Adapted gt
+                # Removing 0 var and bidirectional
+                edge_match_count = 0
+                edge_mismatch_count = 0
+                for itr_edge in edges:
+
+                    if itr_edge in gt_edges_adapt or itr_edge in bidirectional[itr_unit]:
+
+                        edge_match_count += 1
+
+                    else:
+
+                        edge_mismatch_count += 1
+
+                unit_data[itr]['adapt gt'] = {}
+                unit_data[itr]['adapt gt']['pc match'] = 100*edge_match_count/len(gt_edges_adapt)
+                unit_data[itr]['adapt gt']['pc mismatch'] = 100*edge_mismatch_count/len(edges)
+                unit_data[itr]['adapt gt']['overall metric'] = unit_data[itr]['adapt gt']['pc match'] - unit_data[itr]['adapt gt']['pc mismatch']
+
+
+    @staticmethod 
+    def avg_sim_score_scatt_vs_pc_graph_kn(data_store, mode):
+
+        graph_data = {}
+        for itr_unit, itr_data in data_store.items():
+
+            match = []
+            mismatch = []
+            overall = []
+            pc_kn = []
+            for itr_graph in itr_data:
+
+                match.append(itr_graph[mode]['pc match'])
+                mismatch.append(itr_graph[mode]['pc mismatch'])
+                overall.append(itr_graph[mode]['overall metric'])
+                pc_kn.append(itr_graph['pc knowledge'])
+
+            graph_data[itr_unit] = [match, mismatch, overall, pc_kn]
+
+        y_ax = []
+        pc_kn = []
+        for itr_data in graph_data.values():
+
+            y_ax.extend(itr_data[0])
+            pc_kn.extend(itr_data[3])
+
+        plt.figure()
+        plt.scatter(pc_kn, y_ax)
+        plt.xlabel('pc graph kn')
+        plt.ylabel('pc match')
+        plt.show()
+
+
+        y_ax = []
+        for itr_data in graph_data.values():
+
+            y_ax.extend(itr_data[1])
+
+        plt.figure()
+        plt.scatter(pc_kn, y_ax)
+        plt.xlabel('pc graph kn')
+        plt.ylabel('pc mismatch')
+        plt.show()
+
+
+        y_ax = []
+        for itr_data in graph_data.values():
+
+            y_ax.extend(itr_data[2])
+
+        plt.figure()
+        plt.scatter(pc_kn, y_ax)
+        plt.xlabel('pc graph kn')
+        plt.ylabel('overall metric')
+        plt.show()
+
+
+    @staticmethod
+    def get_total_unique_graphs(data_store):
+
+        scores = []
+        for itr_data in data_store.values():
+
+            scores.extend([itr_data[itr]['graph score'] for itr in range(len(itr_data))])
+
+        return 100*(len(set(scores)))/len(scores)
